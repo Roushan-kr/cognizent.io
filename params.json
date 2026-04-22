@@ -1,0 +1,212 @@
+{
+  "schema_version": "1.0.0",
+  "platform": "SmartCover",
+  "description": "Runtime variables, thresholds, feature flags, and environment-specific overrides",
+  "environment": "production",
+  "runtime": {
+    "default_language": "en",
+    "supported_languages": ["en", "hi", "ta", "te", "bn", "mr"],
+    "default_channel": "app",
+    "supported_channels": ["app", "whatsapp", "nfc", "hospital_fhir", "insurer_api"],
+    "request_timeout_seconds": 30,
+    "max_parallel_agents": 4
+  },
+  "health_scoring": {
+    "google_fit_api": {
+      "scopes_required": [
+        "https://www.googleapis.com/auth/fitness.activity.read",
+        "https://www.googleapis.com/auth/fitness.heart_rate.read",
+        "https://www.googleapis.com/auth/fitness.sleep.read",
+        "https://www.googleapis.com/auth/fitness.oxygen_saturation.read",
+        "https://www.googleapis.com/auth/fitness.body.read"
+      ],
+      "consent_required": true,
+      "consent_granularity": "per_metric",
+      "data_aggregation_window_days": 30,
+      "on_device_only": true
+    },
+    "fl_model": {
+      "framework": "TensorFlow Lite",
+      "version": "2.13.0",
+      "model_update_frequency": "weekly_federated_round",
+      "min_participants_per_round": 100,
+      "differential_privacy": {
+        "enabled": true,
+        "epsilon": 1.0,
+        "delta": 1e-5
+      }
+    },
+    "hrs_weights": {
+      "step_count": 0.20,
+      "heart_rate_resting": 0.20,
+      "sleep_duration": 0.18,
+      "active_minutes": 0.17,
+      "blood_oxygen_spo2": 0.12,
+      "stress_index": 0.08,
+      "bmi": 0.05
+    },
+    "hrs_thresholds": {
+      "excellent": { "min": 850, "max": 1000 },
+      "good":      { "min": 700, "max": 849 },
+      "fair":      { "min": 550, "max": 699 },
+      "moderate":  { "min": 400, "max": 549 },
+      "at_risk":   { "min": 0,   "max": 399 }
+    },
+    "privacy_rules": {
+      "raw_data_leaves_device": false,
+      "compliance": ["DPDP_Act_2023", "ABDM_privacy_policy", "IT_Act_2000"],
+      "data_minimisation": true,
+      "never_transmit": [
+        "raw_heart_rate_series",
+        "raw_gps_coordinates",
+        "sleep_stage_breakdown",
+        "blood_glucose_readings",
+        "menstrual_cycle_data",
+        "mental_health_indicators"
+      ]
+    }
+  },
+  "credit": {
+    "limits": {
+      "min_credit_line_inr": 15000,
+      "max_credit_line_inr": 500000,
+      "nfc_offline_limit_inr": 5000,
+      "default_emergency_limit_inr": 15000
+    },
+    "scoring": {
+      "thin_file_cibil_threshold": 650,
+      "weight_normal":   { "cibil": 0.60, "hrs": 0.40 },
+      "weight_thin_file": { "cibil": 0.40, "hrs": 0.60 },
+      "hrs_boost_mapping": {
+        "Excellent": 50000,
+        "Good":      25000,
+        "Fair":      0,
+        "Moderate": -10000,
+        "At Risk":  -25000
+      }
+    },
+    "interest": {
+      "fraud_misuse_annualised_rate_pct": 21,
+      "emi_options_months": [3, 6, 9, 12]
+    }
+  },
+  "insurance": {
+    "ubi": {
+      "base_premium_delta_min_pct": -15,
+      "base_premium_delta_max_pct": 15,
+      "recalculation_frequency": "monthly",
+      "auto_switch_frequency": "quarterly",
+      "hrs_delta_trigger_threshold": 30
+    },
+    "policy_matching": {
+      "embedding_model": "bert-base-multilingual-cased",
+      "index_type": "FAISS",
+      "top_k": 3,
+      "min_similarity": 0.72,
+      "reindex_frequency": "daily"
+    },
+    "fraud_detection": {
+      "auto_approve_below": 0.30,
+      "human_review_min": 0.30,
+      "human_review_max": 0.70,
+      "auto_reject_above": 0.70,
+      "signal_weights": {
+        "wearable_accelerometer": 0.25,
+        "gps_location_match": 0.20,
+        "fhir_record_consistency": 0.25,
+        "digilocker_authenticity": 0.20,
+        "claim_frequency_anomaly": 0.10
+      }
+    },
+    "irdai": {
+      "license_type": "aggregator",
+      "ombudsman_claim_limit_inr": 3000000,
+      "commission_range_pct": { "min": 8, "max": 15 },
+      "required_disclaimers": true,
+      "record_retention_years": 7
+    }
+  },
+  "claims": {
+    "sla": {
+      "auto_approval_target_hours": 2,
+      "human_review_sla_hours": 4,
+      "hospital_auth_target_ms": 500,
+      "general_escalation_sla_minutes": 30
+    },
+    "hospital_integration": {
+      "standard": "HL7_FHIR_R4",
+      "auth_method": "NFC_card_tap",
+      "payment_guarantee_on": "admission",
+      "max_claim_amount_auto_inr": 3000000
+    },
+    "cashless_network": {
+      "partner_onboarding_commission_inr": { "min": 500, "max": 2000 },
+      "target_hospitals_phase_1": 50,
+      "target_hospitals_phase_2": 500
+    }
+  },
+  "evaluation": {
+    "guardrails": {
+      "factual_grounding_threshold": 0.85,
+      "irdai_compliance_threshold": 1.0,
+      "toxicity_threshold": 0.95,
+      "overall_pass_threshold": 0.85
+    },
+    "retry": {
+      "max_retries": 3,
+      "backoff_seconds": [1, 2, 4]
+    },
+    "langsmith": {
+      "tracing_enabled": true,
+      "retention_days": 90,
+      "s3_archive_years": 7
+    }
+  },
+  "infrastructure": {
+    "backend": {
+      "framework": "Node.js / Go microservices (gRPC)",
+      "orchestration": "EKS Kubernetes + Istio mTLS",
+      "target_sla_pct": 99.99
+    },
+    "event_pipeline": {
+      "broker": "Apache Kafka (MSK)",
+      "delivery_guarantee": "at_least_once",
+      "topics": ["claim-events", "credit-events", "ubi-events", "health-events"]
+    },
+    "state_store": {
+      "engine": "Redis",
+      "conversation_ttl_hours": 72,
+      "max_turns_per_thread": 10
+    },
+    "vector_db": {
+      "engine": "FAISS",
+      "reindex_schedule": "daily_02:00_IST"
+    }
+  },
+  "feature_flags": {
+    "federated_learning_enabled": true,
+    "google_health_api_enabled": true,
+    "nfc_offline_mode_enabled": true,
+    "ubi_auto_switch_enabled": true,
+    "multi_language_enabled": true,
+    "wearable_fraud_signals_enabled": true,
+    "abha_fhir_integration_enabled": true,
+    "differential_privacy_enabled": true,
+    "human_handoff_enabled": true,
+    "langsmith_tracing_enabled": true
+  },
+  "revenue": {
+    "insurance_commission_pct": { "min": 8, "max": 15 },
+    "credit_interest_annualised_pct": { "min": 18, "max": 24 },
+    "hospital_commission_inr": { "min": 500, "max": 2000 },
+    "breakeven_target_months": 24,
+    "breakeven_active_cardholders": 5000
+  },
+  "seed_investment": {
+    "irdai_license_inr": 1075000,
+    "tech_build_mvp_inr": { "min": 2000000, "max": 4000000 },
+    "hospital_network_inr": { "min": 500000, "max": 1000000 },
+    "total_seed_inr": { "min": 3500000, "max": 6000000 },
+    "runway_months": 6
+  }
+}

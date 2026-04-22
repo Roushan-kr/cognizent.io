@@ -1,0 +1,373 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:transparent}
+.canvas{padding:24px 16px 32px;font-family:var(--font-sans);min-width:900px;overflow-x:auto}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+
+/* Layer swim lanes */
+.lane-wrap{display:flex;gap:0;position:relative}
+.lane{flex:1;border-right:0.5px dashed var(--color-border-tertiary);padding:0 6px;min-width:148px}
+.lane:last-child{border-right:none}
+.lane-label{font-size:11px;font-weight:500;color:var(--color-text-tertiary);text-align:center;letter-spacing:.06em;text-transform:uppercase;padding:6px 0 14px;white-space:nowrap}
+
+/* Nodes */
+.node{border-radius:8px;border:0.5px solid var(--color-border-secondary);background:var(--color-background-primary);padding:7px 10px;font-size:12px;color:var(--color-text-primary);cursor:pointer;transition:box-shadow .15s,border-color .15s;position:relative;user-select:none}
+.node:hover{border-color:var(--color-border-primary);box-shadow:0 1px 6px rgba(0,0,0,.08)}
+.node.active{border-width:1.5px}
+.node-icon{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:4px;font-size:11px;margin-right:6px;vertical-align:middle;flex-shrink:0}
+.node-title{font-size:12px;font-weight:500;vertical-align:middle}
+.node-sub{font-size:10px;color:var(--color-text-secondary);margin-top:3px;line-height:1.4}
+.node-badge{display:inline-block;font-size:9px;font-weight:500;padding:1px 6px;border-radius:10px;margin-top:4px}
+
+/* Color variants */
+.n-gray .node-icon{background:var(--color-background-secondary)}
+.n-purple .node-icon{background:#ede9fe;color:#6d28d9}
+.n-teal   .node-icon{background:#d1fae5;color:#065f46}
+.n-amber  .node-icon{background:#fef3c7;color:#92400e}
+.n-blue   .node-icon{background:#dbeafe;color:#1e40af}
+.n-pink   .node-icon{background:#fce7f3;color:#9d174d}
+.n-coral  .node-icon{background:#fee2e2;color:#991b1b}
+.n-green  .node-icon{background:#dcfce7;color:#166534}
+.n-indigo .node-icon{background:#e0e7ff;color:#3730a3}
+
+.n-purple.active{border-color:#7c3aed;background:#faf5ff}
+.n-teal.active{border-color:#059669;background:#f0fdf4}
+.n-amber.active{border-color:#d97706;background:#fffbeb}
+.n-blue.active{border-color:#2563eb;background:#eff6ff}
+.n-pink.active{border-color:#db2777;background:#fdf2f8}
+.n-coral.active{border-color:#dc2626;background:#fef2f2}
+.n-green.active{border-color:#16a34a;background:#f0fdf4}
+.n-indigo.active{border-color:#4338ca;background:#eef2ff}
+.n-gray.active{border-color:var(--color-border-primary);background:var(--color-background-secondary)}
+
+@media(prefers-color-scheme:dark){
+  .n-purple .node-icon{background:#3b1f6e;color:#c4b5fd}
+  .n-teal   .node-icon{background:#064e3b;color:#6ee7b7}
+  .n-amber  .node-icon{background:#451a03;color:#fcd34d}
+  .n-blue   .node-icon{background:#1e3a5f;color:#93c5fd}
+  .n-pink   .node-icon{background:#500724;color:#f9a8d4}
+  .n-coral  .node-icon{background:#450a0a;color:#fca5a5}
+  .n-green  .node-icon{background:#052e16;color:#86efac}
+  .n-indigo .node-icon{background:#1e1b4b;color:#a5b4fc}
+  .n-purple.active{border-color:#7c3aed;background:rgba(124,58,237,.12)}
+  .n-teal.active{border-color:#059669;background:rgba(5,150,105,.1)}
+  .n-amber.active{border-color:#d97706;background:rgba(217,119,6,.1)}
+  .n-blue.active{border-color:#2563eb;background:rgba(37,99,235,.1)}
+  .n-pink.active{border-color:#db2777;background:rgba(219,39,119,.1)}
+  .n-coral.active{border-color:#dc2626;background:rgba(220,38,38,.1)}
+  .n-green.active{border-color:#16a34a;background:rgba(22,163,74,.1)}
+  .n-indigo.active{border-color:#4338ca;background:rgba(67,56,202,.1)}
+}
+
+/* Arrow connectors */
+.flow{display:flex;flex-direction:column;align-items:center;gap:0}
+.arr-v{display:flex;flex-direction:column;align-items:center;padding:3px 0}
+.arr-line{width:1.5px;background:var(--color-border-secondary);flex:1;min-height:10px}
+.arr-head{width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:6px solid var(--color-border-secondary)}
+.arr-label{font-size:10px;color:var(--color-text-tertiary);text-align:center;padding:1px 4px;background:var(--color-background-tertiary);border-radius:4px;white-space:nowrap;margin:1px 0}
+
+/* Branch/split layout */
+.split-row{display:flex;gap:8px;align-items:flex-start;width:100%}
+.split-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:0}
+.split-label{font-size:10px;color:var(--color-text-tertiary);font-style:italic;text-align:center;padding:2px 0 4px}
+.branch-bar{height:1.5px;background:var(--color-border-secondary);width:100%;margin:4px 0}
+
+/* Horizontal lane connector */
+.h-connector{display:flex;align-items:center;gap:0;padding:4px 0}
+.h-line{flex:1;height:1.5px;background:var(--color-border-secondary)}
+.h-arrow{font-size:10px;color:var(--color-text-tertiary)}
+
+/* Detail panel */
+.detail{border-top:0.5px solid var(--color-border-tertiary);margin-top:20px;padding:16px}
+.detail h3{font-size:13px;font-weight:500;margin-bottom:6px;color:var(--color-text-primary)}
+.detail p{font-size:12px;color:var(--color-text-secondary);line-height:1.6;margin-bottom:8px}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.detail-card{background:var(--color-background-secondary);border-radius:8px;padding:10px 12px}
+.detail-card .dk{font-size:10px;color:var(--color-text-tertiary);margin-bottom:3px;text-transform:uppercase;letter-spacing:.05em}
+.detail-card .dv{font-size:11px;color:var(--color-text-secondary);line-height:1.5}
+
+/* Section headers */
+.section-hdr{font-size:10px;font-weight:500;color:var(--color-text-tertiary);letter-spacing:.08em;text-transform:uppercase;text-align:center;margin:6px 0 10px;padding-top:8px;border-top:0.5px dashed var(--color-border-tertiary)}
+
+/* Multi-agent badge */
+.agent-tag{display:inline-flex;align-items:center;gap:4px;font-size:10px;padding:2px 8px;border-radius:10px;border:0.5px solid var(--color-border-secondary);color:var(--color-text-secondary);background:var(--color-background-secondary);margin-bottom:4px}
+.dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+</style>
+
+<h2 class="sr-only">Multi-agent LangGraph workflow showing input through memory, classifier, tool routing, evaluator, retry, output formatter and final output nodes.</h2>
+
+<div class="canvas" id="main">
+
+<!-- Header -->
+<div style="text-align:center;margin-bottom:18px">
+  <div style="font-size:13px;font-weight:500;color:var(--color-text-primary);margin-bottom:6px">Multi-agent LangGraph workflow</div>
+  <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+    <span class="agent-tag"><span class="dot" style="background:#7c3aed"></span>HealthTech agent</span>
+    <span class="agent-tag"><span class="dot" style="background:#2563eb"></span>FinTech agent</span>
+    <span class="agent-tag"><span class="dot" style="background:#d97706"></span>InsurTech agent</span>
+    <span class="agent-tag"><span class="dot" style="background:#db2777"></span>Claim agent</span>
+    <span class="agent-tag"><span class="dot" style="background:#6d28d9"></span>Orchestrator</span>
+  </div>
+  <div style="font-size:10px;color:var(--color-text-tertiary);margin-top:6px">Click any node to inspect its prompt, inputs, and LangGraph config</div>
+</div>
+
+<!-- PHASE 1: Intake -->
+<div class="section-hdr">Phase 1 — User intake & context loading</div>
+<div style="display:flex;gap:16px;justify-content:center">
+  <div class="flow" style="width:220px">
+    <div class="node n-gray active" onclick="show('input')" id="nd-input">
+      <span class="node-icon">→</span><span class="node-title">Input</span>
+      <div class="node-sub">User message arrives (text, NFC tap, wearable alert)</div>
+      <span class="node-badge" style="background:var(--color-background-secondary);color:var(--color-text-secondary)">Gateway</span>
+    </div>
+    <div class="arr-v" style="height:28px"><div class="arr-line"></div><div class="arr-head"></div></div>
+    <div class="node n-teal" onclick="show('memory1')" id="nd-memory1">
+      <span class="node-icon">◎</span><span class="node-title">Memory / Context</span>
+      <div class="node-sub">Load user HRS history, credit state, active policy, prior turns</div>
+    </div>
+    <div class="arr-v" style="height:28px"><div class="arr-line"></div><div class="arr-head"></div></div>
+    <div class="node n-purple" onclick="show('llm1')" id="nd-llm1">
+      <span class="node-icon">✦</span><span class="node-title">LLM Step</span>
+      <div class="node-sub">System prompt + context injection. Format user intent as structured query</div>
+    </div>
+    <div class="arr-v" style="height:28px"><div class="arr-line"></div><div class="arr-head"></div></div>
+    <div class="node n-amber" onclick="show('classifier')" id="nd-classifier">
+      <span class="node-icon">⊛</span><span class="node-title">Classifier / Router</span>
+      <div class="node-sub">Classify intent across all agent domains</div>
+    </div>
+  </div>
+</div>
+
+<!-- PHASE 2: Multi-agent routing -->
+<div class="section-hdr" style="margin-top:14px">Phase 2 — Multi-agent domain routing</div>
+
+<!-- Branch bar -->
+<div style="display:flex;align-items:center;justify-content:center;margin-bottom:2px">
+  <div style="width:600px;height:1.5px;background:var(--color-border-secondary);position:relative">
+    <div style="position:absolute;left:8%;top:-4px;width:1.5px;height:10px;background:var(--color-border-secondary)"></div>
+    <div style="position:absolute;left:30%;top:-4px;width:1.5px;height:10px;background:var(--color-border-secondary)"></div>
+    <div style="position:absolute;left:55%;top:-4px;width:1.5px;height:10px;background:var(--color-border-secondary)"></div>
+    <div style="position:absolute;left:77%;top:-4px;width:1.5px;height:10px;background:var(--color-border-secondary)"></div>
+    <div style="position:absolute;left:96%;top:-4px;width:1.5px;height:10px;background:var(--color-border-secondary)"></div>
+  </div>
+</div>
+
+<div class="split-row" style="max-width:780px;margin:0 auto 4px">
+  <!-- Agent 1: HealthTech -->
+  <div class="split-col">
+    <div class="split-label" style="color:#059669">Health query</div>
+    <div class="arr-v" style="height:14px"><div class="arr-line"></div><div class="arr-head"></div></div>
+    <div class="node n-teal" onclick="show('tool-health')" id="nd-tool-health" style="width:136px">
+      <span class="node-icon">⚡</span><span class="node-title">Tool call</span>
+      <div class="node-sub">HRS API + wearable FL model</div>
+    </div>
+    <div class="arr-v" style="height:14px"><div class="arr-line"></div><div class="arr-head"></div></div>
+    <div class="node n-blue" onclick="show('kb-health')" id="nd-kb-health" style="width:136px">
+      <span class="node-icon">◈</span><span class="node-title">Knowledge</span>
+      <div class="node-sub">ABHA / ABDM records</div>
+    </div>
+  </div>
+  <!-- Agent 2: FinTech -->
+  <div class="split-col">
+    <div class="split-label" style="color:#2563eb">Credit query</div>
+    <div class="arr-v" style="height:14px"><div class="arr-line"></div><div class="arr-head"></div></div>
+    <div class="node n-blue" onclick="show('tool-credit')" id="nd-tool-credit" style="width:136px">
+      <span class="node-icon">⚡</span><span class="node-title">Tool call</span>
+      <div class="node-sub">CIBIL + Credit engine API</div>
+    </div>
+    <div class="arr-v" style="height:14px"><div class="arr-line"></div><div class="arr-head"></div></div>
+    <div class="node n-amber" onclick="show('cond-credit')" id="nd-cond-credit" style="width:136px">
+      <span class="node-icon">⑂</span><span class="node-title">Condition</span>
+      <div class="node-sub">Thin file? Use HRS fallback</div>
+    </div>
+  </div>
+  <!-- Agent 3: InsurTech -->
+  <div class="split-col">
+    <div class="split-label" style="color:#d97706">Insurance query</div>
+    <div class="arr-v" style="height:14px"><div class="arr-line"></div><div class="arr-head"></div></div>
+    <div class="node n-amber" onclick="show('tool-policy')" id="nd-tool-policy" style="width:136px">
+      <span class="node-icon">⚡</span><span class="node-title">Tool call</span>
+      <div class="node-sub">BERT policy matcher</div>
+    </div>
+    <div class="arr-v" style="height:14px"><div class="arr-line"></div><div class="arr-head"></div></div>
+    <div class="node n-purple" onclick="show('llm-policy')" id="nd-llm-policy" style="width:136px">
+      <span class="node-icon">✦</span><span class="node-title">LLM Step</span>
+      <div class="node-sub">Explain UBI premium delta</div>
+    </div>
+  </div>
+  <!-- Agent 4: Claim -->
+  <div class="split-col">
+    <div class="split-label" style="color:#db2777">Claim / emergency</div>
+    <div class="arr-v" style="height:14px"><div class="arr-line"></div><div class="arr-head"></div></div>
+    <div class="node n-coral" onclick="show('tool-claim')" id="nd-tool-claim" style="width:136px">
+      <span class="node-icon">⚡</span><span class="node-title">Tool call</span>
+      <div class="node-sub">Fraud detector + FHIR API</div>
+    </div>
+    <div class="arr-v" style="height:14px"><div class="arr-line"></div><div class="arr-head"></div></div>
+    <div class="node n-pink" onclick="show('human')" id="nd-human" style="width:136px">
+      <span class="node-icon">⚑</span><span class="node-title">Human handoff</span>
+      <div class="node-sub">Fraud >.3 or >₹30L → underwriter</div>
+    </div>
+  </div>
+  <!-- Agent 5: FAQ -->
+  <div class="split-col">
+    <div class="split-label" style="color:#4338ca">General FAQ</div>
+    <div class="arr-v" style="height:14px"><div class="arr-line"></div><div class="arr-head"></div></div>
+    <div class="node n-indigo" onclick="show('kb-faq')" id="nd-kb-faq" style="width:136px">
+      <span class="node-icon">◈</span><span class="node-title">Knowledge</span>
+      <div class="node-sub">FAQ DB + policy docs</div>
+    </div>
+    <div class="arr-v" style="height:14px"><div class="arr-line"></div><div class="arr-head"></div></div>
+    <div class="node n-indigo" onclick="show('loop')" id="nd-loop" style="width:136px">
+      <span class="node-icon">↻</span><span class="node-title">Loop</span>
+      <div class="node-sub">Paginate long FAQ results</div>
+    </div>
+  </div>
+</div>
+
+<!-- PHASE 3: Merge + LLM -->
+<div class="section-hdr" style="margin-top:14px">Phase 3 — Merge, LLM synthesis, guardrail</div>
+<div style="display:flex;gap:16px;justify-content:center">
+  <div class="flow" style="width:260px">
+    <div class="node n-green" onclick="show('merge')" id="nd-merge">
+      <span class="node-icon">⊕</span><span class="node-title">Merge / Join</span>
+      <div class="node-sub">Aggregate agent results into unified context object</div>
+    </div>
+    <div class="arr-v" style="height:20px"><div class="arr-line"></div><div class="arr-head"></div></div>
+    <div class="node n-purple" onclick="show('llm2')" id="nd-llm2">
+      <span class="node-icon">✦</span><span class="node-title">LLM Step — Synthesis</span>
+      <div class="node-sub">Generate final response using merged multi-agent context</div>
+    </div>
+    <div class="arr-v" style="height:20px"><div class="arr-line"></div><div class="arr-head"></div></div>
+    <div class="node n-coral" onclick="show('eval')" id="nd-eval">
+      <span class="node-icon">◎</span><span class="node-title">Evaluator / Guardrail</span>
+      <div class="node-sub">Safety, accuracy, regulatory compliance check</div>
+    </div>
+  </div>
+</div>
+
+<!-- PHASE 4: Eval branch -->
+<div class="section-hdr" style="margin-top:14px">Phase 4 — Pass / fail branch</div>
+<div style="display:flex;gap:0;justify-content:center;max-width:500px;margin:0 auto">
+  <div style="width:1px;height:14px;background:var(--color-border-secondary);margin:0 auto 0"></div>
+</div>
+<div style="display:flex;justify-content:center;gap:0;margin:0 auto;max-width:500px">
+  <div style="flex:1;height:1.5px;background:var(--color-border-secondary)"></div>
+</div>
+<div class="split-row" style="max-width:480px;margin:0 auto">
+  <div class="split-col">
+    <div class="split-label" style="color:#16a34a">Pass</div>
+    <div class="arr-v" style="height:14px"><div class="arr-line"></div><div class="arr-head"></div></div>
+    <div class="node n-green" onclick="show('formatter')" id="nd-formatter" style="width:180px">
+      <span class="node-icon">≡</span><span class="node-title">Output Formatter</span>
+      <div class="node-sub">Structure reply for channel (app, NFC, WhatsApp)</div>
+    </div>
+  </div>
+  <div style="width:32px;flex-shrink:0"></div>
+  <div class="split-col">
+    <div class="split-label" style="color:#dc2626">Fail</div>
+    <div class="arr-v" style="height:14px"><div class="arr-line"></div><div class="arr-head"></div></div>
+    <div class="node n-coral" onclick="show('retry')" id="nd-retry" style="width:180px">
+      <span class="node-icon">↺</span><span class="node-title">Retry / Fallback</span>
+      <div class="node-sub">Regenerate with stricter system prompt or safe default</div>
+    </div>
+  </div>
+</div>
+
+<!-- Retry loops back -->
+<div style="display:flex;justify-content:flex-end;max-width:480px;margin:0 auto">
+  <div style="display:flex;flex-direction:column;align-items:flex-end;width:180px">
+    <div class="arr-v" style="height:14px"><div class="arr-line"></div></div>
+    <div style="font-size:10px;color:var(--color-text-tertiary);text-align:right;padding:2px 0">↩ loops to LLM synthesis (max 3)</div>
+  </div>
+</div>
+
+<!-- PHASE 5: Memory + Output -->
+<div class="section-hdr" style="margin-top:10px">Phase 5 — Persist & deliver</div>
+<div style="display:flex;gap:16px;justify-content:center">
+  <div class="flow" style="width:240px">
+    <div class="node n-teal" onclick="show('memory2')" id="nd-memory2">
+      <span class="node-icon">◎</span><span class="node-title">Memory / Context</span>
+      <div class="node-sub">Save turn, HRS delta, claim state to Redis + ABHA</div>
+    </div>
+    <div class="arr-v" style="height:20px"><div class="arr-line"></div><div class="arr-head"></div></div>
+    <div class="node n-green" onclick="show('custom')" id="nd-custom">
+      <span class="node-icon">{/}</span><span class="node-title">Custom Code</span>
+      <div class="node-sub">Emit Kafka event, trigger UBI recalc, update NFC card state</div>
+    </div>
+    <div class="arr-v" style="height:20px"><div class="arr-line"></div><div class="arr-head"></div></div>
+    <div class="node n-gray" onclick="show('output')" id="nd-output">
+      <span class="node-icon">←</span><span class="node-title">Output</span>
+      <div class="node-sub">Final response delivered to user / hospital / insurer</div>
+      <span class="node-badge" style="background:var(--color-background-secondary);color:var(--color-text-secondary)">Terminal</span>
+    </div>
+    <div class="arr-v" style="height:14px"><div class="arr-line"></div></div>
+    <div class="node n-gray" onclick="show('note')" id="nd-note" style="border-style:dashed;opacity:.8">
+      <span class="node-icon">📝</span><span class="node-title">Note</span>
+      <div class="node-sub">Audit log written to LangSmith + Kafka immutable trail</div>
+    </div>
+  </div>
+</div>
+
+</div><!-- end canvas -->
+
+<!-- Detail panel -->
+<div class="detail" id="detail-panel" style="display:none">
+  <h3 id="dp-title"></h3>
+  <p id="dp-desc"></p>
+  <div class="detail-grid" id="dp-grid"></div>
+</div>
+
+<script>
+const DATA = {
+  input:{title:"Input node",desc:"The entry point for all user interactions across all bot types. Normalises the incoming signal — a typed chat message, an NFC tap event from the SmartCover card, a wearable anomaly alert, or a WhatsApp message — into a unified structured payload. Attaches session ID, channel type, timestamp, and ABHA identity token before passing downstream.",cards:[["Prompt template","None — raw normalisation layer. Extracts: {channel}, {session_id}, {user_id}, {raw_payload}"],["LangGraph config","Node type: START. No retry. Emits to: memory/context."],["Inputs","Typed message · NFC tap webhook · Wearable alert event · WhatsApp API body"],["Outputs","Normalised input object: {channel, user_id, session_id, payload, timestamp}"]]},
+  memory1:{title:"Memory / Context (load)",desc:"Loads all persistent state needed before any LLM call. Pulls from Redis (short-term: last 5 turns), ABHA (health records), the FinTech state store (credit limit, NFC card status), and the InsurTech state store (active policy, premium, UBI band). The loaded context is injected into the system prompt for all downstream LLM nodes, ensuring every agent has full awareness of the user's health-finance profile.",cards:[["Prompt template","System prefix: 'User {user_id} context: HRS={hrs}, credit_limit=₹{limit}, active_policy={policy}, last_claim={claim_date}. Prior turns: {history}'"],["LangGraph config","Node type: StateLoader. Reads from Redis + ABHA + credit_store. TTL: 72hr."],["Inputs","session_id · user_id · ABHA token"],["Outputs","State object: {hrs, credit_limit, policy_id, claim_history, prior_turns, abha_records}"]]},
+  llm1:{title:"LLM Step — Intent extraction",desc:"First LLM call in the pipeline. Takes the normalised input and loaded context and produces a structured intent object. Uses a tightly constrained system prompt that instructs the model to output JSON only — no prose — so the classifier can route deterministically without parsing ambiguity. Handles multilingual input (8 Indian languages) via automatic translation in the prompt.",cards:[["Prompt template","'You are a SmartCover intake agent. Given the user message and context below, output JSON: {intent: one of [health_query, credit_query, insurance_query, claim_emergency, faq, escalate], confidence: 0-1, language: ISO code, entities: {order_id?, symptom?, policy_id?}}. User: {input}. Context: {memory}. Output JSON only.'"],["LangGraph config","Model: claude-sonnet-4-20250514. max_tokens: 256. Temperature: 0. Output parsed via Pydantic IntentSchema."],["Inputs","Normalised input payload · Loaded memory/context state"],["Outputs","IntentSchema: {intent, confidence, language, entities}"]]},
+  classifier:{title:"Classifier / Router",desc:"A deterministic conditional edge in the LangGraph, not an LLM call. Routes based on the IntentSchema produced by the LLM Step. Uses confidence threshold (>0.75 for direct routing; below threshold triggers a clarification LLM loop). Maps each intent to its corresponding agent subgraph. Multiple intents detected simultaneously (e.g. claim + credit query) are split and run as parallel branches, then merged.",cards:[["Routing logic","health_query → HealthTech agent\ncredit_query → FinTech agent\ninsurance_query → InsurTech agent\nclaim_emergency → Claim agent\nfaq → Knowledge agent\nescalate → Human handoff"],["LangGraph config","Node type: conditional_edge. No LLM call. Routes on intent field. Parallel dispatch for multi-intent."],["Inputs","IntentSchema from LLM Step"],["Outputs","Routed dispatch to 1–N agent subgraphs"]]},
+  "tool-health":{title:"Tool Call — HealthTech agent",desc:"Calls the on-device Health Risk Score API (HRS endpoint). The tool returns the latest HRS scalar, trend delta, score band, and the top 3 contributing factors (e.g. 'sleep consistency -18%, steps +12%'). For health symptom queries, also calls the ABDM FHIR records endpoint to fetch recent clinical notes. All tool calls are logged to the LangGraph state for audit.",cards:[["Tool definition","name: get_health_risk_score\nparams: {user_id, window_days: 7}\nreturns: {hrs, band, delta, factors[]}"],["Prompt template","'Use the HRS tool to retrieve the user's current health risk score. If the user reports a symptom, also call get_abha_records with category=clinical_notes.'"],["LangGraph config","Tool timeout: 2s. Retry: 2x on 429/503. Max parallel calls: 3."],["Outputs","HRS result + optional FHIR bundle → merged into agent state"]]},
+  "kb-health":{title:"Knowledge Retrieval — ABHA / ABDM",desc:"Semantic search over the user's own ABDM health record store. Uses FAISS vector index built from the user's FHIR bundle (embeddings refreshed on each ABHA fetch). Returns the most relevant clinical notes, discharge summaries, or medication records for the current query. Enables the LLM to ground answers in the user's actual medical history rather than hallucinating.",cards:[["Retrieval config","Index: per-user FAISS (768-dim SBERT embeddings)\nTop-k: 3\nMin similarity: 0.72"],["Prompt template","'Relevant records from your health history: {retrieved_docs}. Answer the user's health question based on these records only. Do not infer conditions not present in the records.'"],["LangGraph config","Node type: KnowledgeRetrieval. Embedding model: sentence-transformers/all-MiniLM-L6-v2."],["Outputs","Top-3 relevant FHIR documents + similarity scores"]]},
+  "tool-credit":{title:"Tool Call — FinTech agent",desc:"Calls the LightGBM Credit Engine API. Passes the current HRS score and CIBIL score (cached, refreshed every 90 days) to get the latest pre-approved credit limit, available balance, and limit growth forecast. For card management queries, also calls the NFC Card Management System API to check card status, lock/unlock, or retrieve the offline ARQC balance.",cards:[["Tool definition","name: get_credit_limit\nparams: {user_id, hrs_score, cibil_score}\nreturns: {limit, available, band, shap_factors[]}"],["Prompt template","'Use get_credit_limit to retrieve the user's current credit status. If the user asks about their card, also call get_nfc_card_status. Present limit in INR.'"],["LangGraph config","Tool timeout: 500ms. Retry: 1x. Fallback: cached limit with staleness flag."],["Outputs","Credit limit + SHAP explanation + card status"]]},
+  "cond-credit":{title:"Condition / Branch — thin file check",desc:"A conditional branch node that checks whether the CIBIL score is below the thin-file threshold (score <500 or history <6 months). If thin file detected, branches to the HRS fallback path which assigns credit based primarily on HRS. If full file, passes directly to the credit limit response. This ensures financially excluded users with good health profiles still qualify.",cards:[["Branch logic","IF cibil_score < 500 OR history_months < 6 THEN use HRS-primary model ELSE use dual-score model"],["LangGraph config","Node type: conditional_edge. No LLM. Routes on cibil_thin_file boolean flag from tool response."],["Inputs","Credit tool response with CIBIL metadata"],["Outputs","Routed to HRS-fallback path or standard credit response"]]},
+  "tool-policy":{title:"Tool Call — InsurTech agent",desc:"Calls the BERT Policy Matcher API. Sends the user's HRS, ABHA health summary embedding, and current query to the FAISS policy clause index. Returns the top 3 policy recommendations ranked by cosine similarity, with per-clause relevance scores. For UBI premium queries, also calls the UBI Engine API to get the current month's premium adjustment breakdown.",cards:[["Tool definition","name: match_policy\nparams: {hrs, health_summary_embedding, query_embedding}\nreturns: {policies: [{id, name, score, clauses[]}]}"],["Prompt template","'Use match_policy to find the best-fit insurance plans for this user. If the user asks about their premium, call get_ubi_premium_breakdown. Explain the top recommendation in plain language.'"],["LangGraph config","Tool timeout: 1s. FAISS top-k: 5. Min similarity: 0.68."],["Outputs","Ranked policy list + UBI premium delta with behaviour factors"]]},
+  "llm-policy":{title:"LLM Step — Insurance explanation",desc:"Dedicated LLM node for the InsurTech agent. Takes the BERT policy match results and UBI premium breakdown and generates a plain-language explanation suitable for a non-expert user. Instructed to always mention: why the recommended policy was selected (top 2 clause matches), what the user can do to lower their premium (behaviour tips from HRS factors), and the auto-switch timeline.",cards:[["Prompt template","'You are SmartCover's insurance advisor. Explain to the user in simple language: (1) Why we recommend {policy_name}: it covers {top_clauses}. (2) Your premium this month is ₹{premium} ({delta}% vs last month) because: {ubi_factors}. (3) You can lower it by: {improvement_tips}. Be warm and concise. Max 3 sentences per point.'"],["LangGraph config","Model: claude-sonnet-4-20250514. max_tokens: 512. Temperature: 0.3."],["Inputs","Policy match results + UBI breakdown"],["Outputs","Plain-language insurance explanation string"]]},
+  "tool-claim":{title:"Tool Call — Claim agent",desc:"The claim pipeline tool orchestration. Calls: (1) create_claim_event — files the claim in the Kafka pipeline and returns a claim UUID; (2) run_fraud_detection — calls the XGBoost fraud ensemble with wearable GPS, accelerometer, FHIR and DigiLocker signals; (3) get_hospital_auth — if fraud score <0.3, calls the hospital HL7 FHIR API to issue the cashless authorization letter. All three calls are orchestrated sequentially with conditional branching based on fraud score.",cards:[["Tool chain","1. create_claim_event({user_id, nfc_tap, hospital_id})\n2. run_fraud_detection({claim_id, signals})\n3. IF fraud<0.3: get_hospital_auth({claim_id, policy_id})"],["Prompt template","'You are SmartCover's claim processing agent. A claim has been initiated. Call the claim tools in sequence. If fraud score >0.3, do not issue authorization — escalate to human_handoff. Communicate status to user at each step.'"],["LangGraph config","Tool timeout: 3s each. Sequential execution. Conditional edge on fraud_score threshold."],["Outputs","claim_id + fraud_score + optional auth_letter"]]},
+  human:{title:"Human Handoff node",desc:"LangGraph interrupt() node. Pauses graph execution and routes to the underwriter review queue when: fraud score is in the ambiguous range (0.3–0.7), claim exceeds ₹30 lakh, a policy clause requires human interpretation, or the user explicitly requests human support. Sends a structured notification to the underwriter dashboard. Graph remains in INTERRUPTED state until the underwriter submits a decision via the internal review UI, which calls LangGraph's resume() API.",cards:[["Interrupt trigger","fraud_score in (0.3, 0.7) OR claim_amount > 3000000 OR policy_ambiguity=true OR user_request=escalate"],["LangGraph config","Node type: interrupt(). State preserved in Redis. SLA timer: 4hr for claims, 30min for general escalations. Resume via: POST /lg/resume/{thread_id}"],["Notification","Slack + email to on-call underwriter. Dashboard shows: fraud signal breakdown, policy clause analysis, FHIR summary, recommended action."],["Outputs","Human decision event → resumes graph with decision.reason + decision.approved boolean"]]},
+  "kb-faq":{title:"Knowledge Retrieval — FAQ + policy docs",desc:"Semantic retrieval over the SmartCover FAQ database and all IRDAI-compliant policy documentation. Uses a shared FAISS index covering: product FAQs, claim process guides, premium explanation docs, and regulatory consumer rights documents. Returns the top 3 most relevant passages ranked by cosine similarity to the user's query embedding.",cards:[["Retrieval config","Index: shared FAQ + policy FAISS (SBERT embeddings)\nTop-k: 3\nMin similarity: 0.65\nLanguage: multilingual-e5-small"],["Prompt template","'Answer the user's question using only the retrieved FAQ passages below. If the answer is not in the passages, say so clearly and offer to connect them with support. Do not fabricate policy details. Passages: {retrieved_docs}'"],["LangGraph config","Node type: KnowledgeRetrieval. Refresh: daily re-index on FAQ changes."],["Outputs","Top-3 FAQ passages + source attribution"]]},
+  loop:{title:"Loop node — FAQ pagination",desc:"A LangGraph loop construct used when the FAQ retrieval returns multiple relevant but distinct topics (e.g. user asked a compound question covering both claim process and premium calculation). Iterates over each retrieved passage, generates a focused response for each, and accumulates into a structured multi-part answer. Exits when all passages are covered or max_iterations (3) is reached.",cards:[["Loop config","max_iterations: 3\nExit condition: all passages processed OR confidence > 0.9\nAccumulator: list[AnswerChunk]"],["Prompt template","'For passage {i} of {n}: {passage}. Write one concise paragraph answering the relevant part of the user's question. Output JSON: {chunk_text, source_id}'"],["LangGraph config","Node type: loop with accumulator. Parallel execution disabled (sequential for coherence)."],["Outputs","List of answer chunks → passed to Merge node"]]},
+  merge:{title:"Merge / Join node",desc:"Aggregates all agent branch outputs into a single unified context object. Handles: parallel branch results (multiple agents ran simultaneously), sequential results from loops, and any human handoff decisions. Applies a priority order for conflicts: Claim agent results override InsurTech which overrides FinTech which overrides HealthTech. Normalises all outputs to a common ResponsePart schema before passing to the synthesis LLM.",cards:[["Merge logic","Priority: claim > insurtech > fintech > healthtech > faq\nConflict resolution: higher-confidence result wins\nSchema: List[ResponsePart{agent, content, confidence, source}]"],["LangGraph config","Node type: merge(). Waits for all active branches. Timeout: 5s (uses partial results if a branch times out with a staleness flag)."],["Inputs","All active agent branch outputs"],["Outputs","Unified ResponseParts list → synthesis LLM"]]},
+  llm2:{title:"LLM Step — Final synthesis",desc:"The primary response generation LLM call. Takes the merged multi-agent context and produces the final user-facing response. System prompt enforces: (1) channel-appropriate tone and length (app = concise, WhatsApp = conversational, hospital NFC = minimal), (2) IRDAI regulatory language requirements (no guarantees, correct disclaimers), (3) SmartCover brand voice (warm, empowering, jargon-free). Uses the full merged context to ensure the response is grounded in real data from all relevant agents.",cards:[["Prompt template","'You are SmartCover's main response agent. Use the agent results below to write a response for channel: {channel}. Rules: (1) Never make promises about coverage not confirmed by the InsurTech agent. (2) For claim queries, always state the claim reference ID. (3) Keep language simple — user is {language}-speaking. (4) Tone: warm, empowering, factual. Results: {merged_context}'"],["LangGraph config","Model: claude-sonnet-4-20250514. max_tokens: 800 (app) / 400 (WhatsApp) / 200 (NFC). Temperature: 0.4."],["Inputs","Merged ResponseParts from all agents"],["Outputs","Draft response string"]]},
+  eval:{title:"Evaluator / Guardrail node",desc:"A three-part automated evaluation step that every response must pass before delivery. Check 1 — Safety: scans for hallucinated policy details, incorrect claim amounts, or fabricated ABHA data using a lightweight fact-checker model that cross-references against the agent tool outputs. Check 2 — Regulatory: validates IRDAI disclosure requirements (no coverage guarantees without policy confirmation, correct complaint escalation language). Check 3 — Toxicity: ensures response is appropriate for the user's context and demographic.",cards:[["Eval checks","1. Factual grounding: response facts ⊆ agent tool outputs\n2. IRDAI compliance: required disclaimers present\n3. Toxicity: Anthropic safety classifier < threshold"],["LangGraph config","Node type: evaluator. All 3 checks run in parallel. Result: {passed: bool, failures: List[str], score: 0-1}. Passed if score > 0.85."],["Fail routing","failures → Retry/Fallback node with failure reasons injected into retry prompt"],["Outputs","{passed, score, failures} → conditional edge to Formatter or Retry"]]},
+  formatter:{title:"Output Formatter node",desc:"Transforms the LLM-generated response into the exact format required by the delivery channel. App: structured JSON with sections (heading, body, action_button, claim_ref). WhatsApp: plain text with emoji permitted, max 1600 chars. NFC display: ultra-minimal 2-line confirmation. Hospital FHIR: HL7 ClaimResponse resource. Insurer API: structured JSON with risk signal payload. Also injects tracking metadata (response_id, agent_trace_id) for analytics.",cards:[["Formatting rules","app: {title, body, cta, claim_ref} JSON\nWhatsApp: plain text ≤1600 chars\nNFC: 2 lines, max 40 chars each\nhospital_fhir: HL7 ClaimResponse R4\ninsurer_api: risk signal JSON"],["LangGraph config","Node type: OutputFormatter. No LLM. Pure transformation. Deterministic."],["Inputs","Passed response string + channel type + metadata"],["Outputs","Channel-formatted response object → Memory save → Custom Code → Output"]]},
+  retry:{title:"Retry / Fallback node",desc:"Handles failed evaluator checks with a maximum of 3 retry attempts. On each retry, the failure reasons are injected into the synthesis LLM's system prompt as explicit constraints ('Your previous response failed because: {failures}. On this retry, ensure: {constraints}'). If all 3 retries fail, activates the safe fallback: a pre-written, pre-approved generic response that acknowledges the query and routes to human support — never a hallucinated answer.",cards:[["Retry prompt","'Your previous response failed evaluation. Failures: {failures}. Retry with these constraints: {constraints}. If you cannot produce a response satisfying all constraints, respond with ESCALATE.'"],["LangGraph config","max_retries: 3. On ESCALATE output → human_handoff. Exponential backoff: 1s, 2s, 4s."],["Fallback response","'I wasn't able to process your request automatically. Your reference is {ref_id}. Our team will contact you within 2 hours. For emergencies: tap your SmartCover card at any partner hospital.'"],["Outputs","Retried response → Evaluator (loop) OR safe fallback → Formatter"]]},
+  memory2:{title:"Memory / Context (save)",desc:"Persists the completed interaction to all relevant state stores. Redis: saves this turn to the conversation history (TTL 72hr, max 10 turns). ABHA: if a claim was processed, pushes a FHIR Encounter record to the user's ABDM health timeline. Credit store: if HRS delta was significant, triggers a credit limit recalculation job. InsurTech store: saves any UBI premium recalculation signals triggered by this interaction.",cards:[["Persistence targets","Redis: conversation turn\nABHA FHIR: Encounter record (if claim)\nCredit store: HRS delta signal\nInsurTech store: UBI recalc flag"],["LangGraph config","Node type: StateSaver. Async writes (fire-and-forget). Does not block output delivery."],["Inputs","Full interaction state + formatted response + agent results"],["Outputs","Persistence confirmations (non-blocking)"]]},
+  custom:{title:"Custom Code node",desc:"Post-processing side effects that can't be expressed as LLM calls or tool calls. Responsibilities: emit a domain event to the Kafka MSK topic corresponding to this interaction type (claim.completed, credit.checked, premium.recalculated, health.queried), trigger any downstream async jobs (UBI recalculation, credit limit revision, hospital payment initiation), update the NFC card Secure Element if credit limit changed, and push a LangSmith trace event for observability.",cards:[["Kafka events emitted","claim.completed → claim-events topic\ncredit.checked → credit-events topic\npremium.recalculated → ubi-events topic\nhealth.queried → health-events topic"],["LangGraph config","Node type: custom. Pure Python/Go function. No LLM. Async execution."],["Side effects","NFC card SE update if credit_limit changed\nUBI recalculation job if hrs_delta > 30\nHospital payment initiation if claim approved"],["Outputs","Kafka event IDs + job trigger confirmations → Output node"]]},
+  output:{title:"Output node",desc:"The terminal node of the LangGraph. Delivers the formatted response to the correct channel endpoint: app push notification (FCM/APNs), WhatsApp Business API, hospital NFC reader API callback, or insurer API webhook. Includes the response_id and agent_trace_id in all channel payloads for end-to-end tracking. Marks the LangGraph thread as COMPLETED in Redis.",cards:[["Delivery endpoints","App: FCM/APNs push + in-app API\nWhatsApp: Meta Business API\nNFC/hospital: FHIR callback webhook\nInsurer: REST webhook subscription"],["LangGraph config","Node type: END. Marks thread COMPLETED. Triggers async audit write to LangSmith."],["Inputs","Channel-formatted response + delivery metadata"],["Outputs","Delivery confirmation + response_id → Note (audit log)"]]},
+  note:{title:"Note — audit log",desc:"A documentation node, not a processing step. Represents the LangSmith distributed trace that is automatically written at the end of every LangGraph thread. Contains: full node execution timeline, all LLM call inputs/outputs, tool call results, evaluator scores, memory operations, retry history, and final delivery confirmation. Retained for 7 years per IRDAI record-keeping requirements.",cards:[["Audit contents","LangSmith trace: node timeline + LLM I/O + tool results + evaluator scores + memory ops + delivery confirmation"],["Retention","LangSmith: 90 days (live query)\nKafka S3 archive: 7 years (IRDAI requirement)\nRedis: 72hr (conversation state only)"],["Compliance","Full replay capability for regulatory disputes\nHuman decision records separately immutable"],["Access","Internal: LangSmith dashboard\nRegulatory: S3 audit bucket with IRDAI-auditor read IAM role"]]},
+};
+
+let currentNode = null;
+
+function show(id){
+  if(currentNode===id){hide();return}
+  currentNode=id;
+  document.querySelectorAll('.node').forEach(n=>n.classList.remove('active'));
+  const el=document.getElementById('nd-'+id);
+  if(el)el.classList.add('active');
+  const d=DATA[id];
+  if(!d)return;
+  const panel=document.getElementById('detail-panel');
+  document.getElementById('dp-title').textContent=d.title;
+  document.getElementById('dp-desc').textContent=d.desc;
+  const grid=document.getElementById('dp-grid');
+  grid.innerHTML=d.cards.map(([k,v])=>`<div class="detail-card"><div class="dk">${k}</div><div class="dv" style="white-space:pre-wrap">${v}</div></div>`).join('');
+  panel.style.display='block';
+  setTimeout(()=>panel.scrollIntoView({behavior:'smooth',block:'nearest'}),80);
+}
+
+function hide(){
+  currentNode=null;
+  document.querySelectorAll('.node').forEach(n=>n.classList.remove('active'));
+  document.getElementById('detail-panel').style.display='none';
+}
+</script>

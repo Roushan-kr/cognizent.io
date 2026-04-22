@@ -1,0 +1,231 @@
+{
+  "schema_version": "1.0.0",
+  "platform": "SmartCover",
+  "description": "Agent role definitions, LLM configs, tool access, and privacy boundaries",
+  "agents": {
+    "orchestrator": {
+      "id": "orchestrator",
+      "display_name": "SmartCover Orchestrator",
+      "role": "Intent classification, multi-agent routing, merge coordination",
+      "model": "claude-sonnet-4-20250514",
+      "temperature": 0.2,
+      "max_tokens": 400,
+      "system_prompt": "You are SmartCover's routing orchestrator. Classify the user's intent into one or more domains: health_query, credit_query, insurance_query, claim_query, faq. Output ONLY a JSON intent object. Never fabricate health or financial data.",
+      "output_schema": {
+        "type": "intent",
+        "fields": ["primary_domain", "secondary_domains", "urgency", "channel", "language"]
+      },
+      "privacy_tier": "tier_1_minimal",
+      "tools_allowed": ["intent_classifier", "language_detector"],
+      "memory_read": ["conversation_history", "user_channel_pref"],
+      "memory_write": ["intent_log"]
+    },
+    "healthtech_agent": {
+      "id": "healthtech_agent",
+      "display_name": "HealthTech Agent",
+      "role": "Health Risk Score computation, wearable data processing, ABHA record lookup",
+      "model": "claude-sonnet-4-20250514",
+      "temperature": 0.1,
+      "max_tokens": 600,
+      "system_prompt": "You are SmartCover's HealthTech agent. You receive only a numeric Health Risk Score (HRS 0-1000) and aggregate health bands — NEVER raw biometric data. Use HRS to inform insurance and credit decisions. Comply strictly with DPDP Act 2023. Never infer diagnosis.",
+      "privacy_tier": "tier_3_sensitive",
+      "federated_learning": {
+        "enabled": true,
+        "model": "TensorFlow Lite (on-device FL)",
+        "data_residency": "device_only",
+        "output": "HRS_score_0_to_1000",
+        "raw_data_leaves_device": false,
+        "compliance": ["DPDP_Act_2023", "ABDM_privacy_policy"]
+      },
+      "health_score_matrix": {
+        "source": "google_fit_health_api",
+        "metrics_collected_on_device": [
+          "step_count_daily",
+          "heart_rate_resting_avg",
+          "sleep_duration_hours",
+          "active_minutes_daily",
+          "blood_oxygen_spo2",
+          "stress_index",
+          "bmi_computed"
+        ],
+        "privacy_abstraction": {
+          "method": "federated_local_model",
+          "output_only": "HRS_band",
+          "HRS_bands": {
+            "850-1000": { "label": "Excellent", "premium_delta": -0.15, "credit_boost": 50000 },
+            "700-849":  { "label": "Good",      "premium_delta": -0.08, "credit_boost": 25000 },
+            "550-699":  { "label": "Fair",       "premium_delta": 0.0,   "credit_boost": 0 },
+            "400-549":  { "label": "Moderate",   "premium_delta": 0.08,  "credit_boost": -10000 },
+            "0-399":    { "label": "At Risk",     "premium_delta": 0.15,  "credit_boost": -25000 }
+          },
+          "never_share": [
+            "raw_heart_rate_series",
+            "GPS_location",
+            "sleep_stage_breakdown",
+            "blood_glucose",
+            "menstrual_data"
+          ]
+        }
+      },
+      "tools_allowed": [
+        "hrs_api",
+        "google_fit_health_api",
+        "abha_fhir_reader",
+        "wearable_sync"
+      ],
+      "memory_read": ["hrs_history_30d", "abha_summary"],
+      "memory_write": ["hrs_current", "hrs_delta"]
+    },
+    "fintech_agent": {
+      "id": "fintech_agent",
+      "display_name": "FinTech Agent",
+      "role": "Credit scoring, NFC card management, EMI structuring",
+      "model": "claude-sonnet-4-20250514",
+      "temperature": 0.1,
+      "max_tokens": 500,
+      "system_prompt": "You are SmartCover's FinTech agent. Compute dual credit scores using CIBIL + HRS. Manage health credit line limits (₹15K–₹5L). Apply RBI NBFC compliance rules. If thin CIBIL file, weight HRS at 60%. Always state the credit decision rationale.",
+      "privacy_tier": "tier_2_financial",
+      "credit_engine": {
+        "model": "LightGBM_stacking",
+        "inputs": ["cibil_score", "hrs_band", "income_declared", "existing_emis"],
+        "weight_normal": { "cibil": 0.6, "hrs": 0.4 },
+        "weight_thin_file": { "cibil": 0.4, "hrs": 0.6 },
+        "thin_file_threshold": 650,
+        "output": "credit_limit_inr",
+        "min_limit": 15000,
+        "max_limit": 500000
+      },
+      "nfc_card": {
+        "offline_limit_inr": 5000,
+        "chip": "NFC Secure Element",
+        "fraud_treatment": "interest_bearing_credit",
+        "emergency_auth": "card_tap_no_internet"
+      },
+      "tools_allowed": ["cibil_api", "credit_engine_api", "nfc_card_manager", "emi_calculator"],
+      "memory_read": ["credit_history", "active_emi_list", "hrs_current"],
+      "memory_write": ["credit_limit_updated", "emi_schedule"]
+    },
+    "insurtech_agent": {
+      "id": "insurtech_agent",
+      "display_name": "InsurTech Agent",
+      "role": "Policy matching, UBI premium calculation, fraud detection, claim approval",
+      "model": "claude-sonnet-4-20250514",
+      "temperature": 0.15,
+      "max_tokens": 700,
+      "system_prompt": "You are SmartCover's InsurTech agent. You are an IRDAI-licensed aggregator. Match user profile to policies using BERT embeddings. Calculate UBI premium delta (±15% monthly) based on HRS band. Apply multi-signal fraud detection. Always include required IRDAI disclaimers. Never guarantee coverage without policy confirmation.",
+      "privacy_tier": "tier_2_financial",
+      "irdai_compliance": {
+        "license_type": "IRDAI_aggregator",
+        "disclaimers_required": true,
+        "ombudsman_limit_inr": 3000000,
+        "record_retention_years": 7
+      },
+      "ubi_engine": {
+        "base_premium_delta_range": [-0.15, 0.15],
+        "recalculation_frequency": "monthly",
+        "inputs": ["hrs_band", "claim_history", "lifestyle_score"],
+        "auto_switch_policy": true,
+        "auto_switch_frequency": "quarterly"
+      },
+      "policy_matcher": {
+        "model": "BERT_embeddings",
+        "index_type": "FAISS",
+        "top_k": 3,
+        "min_similarity": 0.72
+      },
+      "fraud_detection": {
+        "signals": [
+          "wearable_accelerometer",
+          "GPS_location_at_claim",
+          "hl7_fhir_records",
+          "digilocker_docs",
+          "claim_frequency_pattern"
+        ],
+        "fraud_score_range": [0.0, 1.0],
+        "auto_approve_below": 0.3,
+        "human_review_range": [0.3, 0.7],
+        "auto_reject_above": 0.7,
+        "target_reduction": 0.70
+      },
+      "tools_allowed": [
+        "bert_policy_matcher",
+        "ubi_calculator",
+        "fraud_detector",
+        "claim_approver",
+        "irdai_policy_db"
+      ],
+      "memory_read": ["active_policy", "claim_history_12m", "hrs_current", "hrs_delta"],
+      "memory_write": ["premium_updated", "claim_status", "fraud_score"]
+    },
+    "claim_agent": {
+      "id": "claim_agent",
+      "display_name": "Claim Agent",
+      "role": "End-to-end cashless claim processing, hospital auth, TPA coordination",
+      "model": "claude-sonnet-4-20250514",
+      "temperature": 0.1,
+      "max_tokens": 600,
+      "system_prompt": "You are SmartCover's Claim agent. Process cashless claims end-to-end. Coordinate with hospitals via HL7 FHIR. Target 2-hr auto-approval. Validate all FHIR records before approval. Emit claim events to Kafka. Always output a claim reference ID.",
+      "privacy_tier": "tier_3_sensitive",
+      "claim_sla": {
+        "auto_approval_target_hours": 2,
+        "hospital_auth_target_ms": 500,
+        "human_review_sla_hours": 4
+      },
+      "hospital_integration": {
+        "standard": "HL7_FHIR_R4",
+        "auth_protocol": "NFC_card_tap",
+        "payment_guarantee": "on_admission",
+        "fhir_resources": ["Claim", "ClaimResponse", "Coverage", "Patient", "Encounter"]
+      },
+      "tools_allowed": [
+        "fhir_claim_processor",
+        "hospital_auth_api",
+        "tpa_connector",
+        "digilocker_verifier",
+        "payment_gateway"
+      ],
+      "memory_read": ["active_policy", "credit_limit_updated", "abha_summary"],
+      "memory_write": ["claim_status", "claim_ref_id", "fhir_encounter_record"]
+    },
+    "faq_agent": {
+      "id": "faq_agent",
+      "display_name": "FAQ & Knowledge Agent",
+      "role": "Semantic retrieval over SmartCover docs and IRDAI policy documentation",
+      "model": "claude-sonnet-4-20250514",
+      "temperature": 0.3,
+      "max_tokens": 500,
+      "system_prompt": "You are SmartCover's FAQ agent. Answer questions using ONLY retrieved passages from the approved FAQ database and IRDAI policy docs. If the answer is not in the retrieved passages, say so and offer to connect the user with human support. Do not fabricate policy details.",
+      "privacy_tier": "tier_1_minimal",
+      "retrieval": {
+        "index": "shared_faq_policy_faiss",
+        "embedding_model": "multilingual-e5-small",
+        "top_k": 3,
+        "min_similarity": 0.65,
+        "languages": ["en", "hi", "ta", "te", "bn", "mr"]
+      },
+      "tools_allowed": ["faq_retriever", "policy_doc_search"],
+      "memory_read": ["conversation_history"],
+      "memory_write": []
+    },
+    "human_handoff_agent": {
+      "id": "human_handoff_agent",
+      "display_name": "Human Handoff (Underwriter)",
+      "role": "Escalation for ambiguous fraud scores, high-value claims, policy interpretation",
+      "model": null,
+      "langgraph_node_type": "interrupt",
+      "trigger_conditions": {
+        "fraud_score_range": [0.3, 0.7],
+        "claim_amount_exceeds_inr": 3000000,
+        "policy_ambiguity": true,
+        "user_explicit_escalation": true
+      },
+      "sla": {
+        "claim_review_hours": 4,
+        "general_escalation_minutes": 30
+      },
+      "notification_channels": ["slack", "email"],
+      "resume_endpoint": "POST /lg/resume/{thread_id}",
+      "state_store": "redis"
+    }
+  }
+}

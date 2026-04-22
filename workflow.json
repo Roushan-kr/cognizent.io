@@ -1,0 +1,541 @@
+{
+  "schema_version": "1.0.0",
+  "platform": "SmartCover",
+  "workflow_id": "smartcover_main_pipeline",
+  "description": "End-to-end LangGraph multi-agent workflow: user intake → health scoring → credit/insurance/claim routing → synthesis → delivery",
+  "langgraph_config": {
+    "state_store": "redis",
+    "state_ttl_hours": 72,
+    "max_turns": 10,
+    "thread_id_format": "sc_{channel}_{user_id}_{timestamp}",
+    "tracing": "langsmith",
+    "audit_retention_years": 7
+  },
+  "phases": [
+    {
+      "phase_id": "phase_1_intake",
+      "name": "User Intake & Context Loading",
+      "description": "Receive user input, load memory context, classify intent",
+      "nodes": [
+        {
+          "node_id": "input",
+          "type": "entry",
+          "display": "Input Gateway",
+          "description": "User message arrives via app, NFC tap, WhatsApp, or wearable alert",
+          "channels": ["app", "whatsapp", "nfc_tap", "wearable_alert"],
+          "next": "memory_load"
+        },
+        {
+          "node_id": "memory_load",
+          "type": "memory_read",
+          "display": "Memory / Context Load",
+          "agent": "orchestrator",
+          "reads": [
+            "hrs_history_30d",
+            "hrs_current",
+            "credit_limit_updated",
+            "active_policy",
+            "claim_history_12m",
+            "conversation_history",
+            "abha_summary",
+            "user_channel_pref"
+          ],
+          "next": "llm_context_injection"
+        },
+        {
+          "node_id": "llm_context_injection",
+          "type": "llm",
+          "display": "LLM — Context Injection",
+          "agent": "orchestrator",
+          "prompt_template": "system_prompt + context_injection",
+          "description": "Format user intent as structured query with full context",
+          "next": "classifier_router"
+        },
+        {
+          "node_id": "classifier_router",
+          "type": "classifier",
+          "display": "Classifier / Router",
+          "agent": "orchestrator",
+          "outputs": {
+            "health_query": "phase_2_healthtech",
+            "credit_query": "phase_2_fintech",
+            "insurance_query": "phase_2_insurtech",
+            "claim_query": "phase_2_claim",
+            "faq": "phase_2_faq",
+            "multi_domain": "phase_2_parallel_dispatch"
+          },
+          "parallel_allowed": true
+        }
+      ]
+    },
+    {
+      "phase_id": "phase_2_healthtech",
+      "name": "HealthTech Agent — Health Risk Scoring",
+      "description": "Privacy-first on-device FL scoring using Google Health API matrix",
+      "agent": "healthtech_agent",
+      "nodes": [
+        {
+          "node_id": "health_privacy_gate",
+          "type": "privacy_gate",
+          "display": "Privacy Gate (DPDP)",
+          "description": "Verify consent scope. Block raw biometric data from leaving device. Only HRS band passes through.",
+          "checks": [
+            "user_consent_health_data",
+            "dpdp_act_2023_compliance",
+            "abdm_privacy_policy",
+            "no_raw_biometrics_in_payload"
+          ],
+          "on_fail": "privacy_breach_halt",
+          "next": "google_health_api_call"
+        },
+        {
+          "node_id": "google_health_api_call",
+          "type": "tool_call",
+          "display": "Tool — Google Fit / Health API",
+          "tool": "google_fit_health_api",
+          "description": "Fetch aggregated health metrics ON-DEVICE via Google Health API. No raw series data transmitted.",
+          "on_device_only": true,
+          "metrics_fetched": [
+            "step_count_daily_7d_avg",
+            "heart_rate_resting_avg_30d",
+            "sleep_duration_hours_avg",
+            "active_minutes_daily_avg",
+            "blood_oxygen_spo2_avg",
+            "stress_index_band",
+            "bmi_computed"
+          ],
+          "output": "local_health_metrics_bundle",
+          "next": "fl_model_inference"
+        },
+        {
+          "node_id": "fl_model_inference",
+          "type": "tool_call",
+          "display": "Tool — FL Model (On-Device)",
+          "tool": "hrs_api",
+          "description": "TensorFlow Lite federated model runs on-device. Produces HRS 0–1000. Only the HRS score + band leaves the device.",
+          "on_device_only": true,
+          "input": "local_health_metrics_bundle",
+          "output": {
+            "hrs_score": "integer_0_to_1000",
+            "hrs_band": "Excellent|Good|Fair|Moderate|At Risk",
+            "hrs_delta_30d": "integer",
+            "premium_delta": "float",
+            "credit_boost_inr": "integer"
+          },
+          "raw_data_transmitted": false,
+          "next": "abha_fhir_lookup"
+        },
+        {
+          "node_id": "abha_fhir_lookup",
+          "type": "knowledge",
+          "display": "Knowledge — ABHA / ABDM Records",
+          "tool": "abha_fhir_reader",
+          "description": "Fetch user's ABDM health summary (diagnoses, allergies, prior hospitalizations) for claim context. Minimal fields only.",
+          "fhir_resources": ["Patient", "Condition", "AllergyIntolerance", "Immunization"],
+          "next": "health_output_merge"
+        },
+        {
+          "node_id": "health_output_merge",
+          "type": "output",
+          "display": "Health Agent Output",
+          "output": {
+            "hrs_score": "integer",
+            "hrs_band": "string",
+            "hrs_delta": "integer",
+            "premium_delta": "float",
+            "credit_boost_inr": "integer",
+            "abha_summary": "object"
+          },
+          "next": "phase_3_merge"
+        }
+      ]
+    },
+    {
+      "phase_id": "phase_2_fintech",
+      "name": "FinTech Agent — Credit Line",
+      "description": "Dual credit scoring (CIBIL + HRS), NFC card management, EMI structuring",
+      "agent": "fintech_agent",
+      "nodes": [
+        {
+          "node_id": "cibil_api_call",
+          "type": "tool_call",
+          "display": "Tool — CIBIL API",
+          "tool": "cibil_api",
+          "output": { "cibil_score": "integer", "thin_file": "boolean" },
+          "next": "credit_thin_file_condition"
+        },
+        {
+          "node_id": "credit_thin_file_condition",
+          "type": "condition",
+          "display": "Condition — Thin File?",
+          "condition": "cibil_score < 650 OR thin_file == true",
+          "on_true": { "weight_hrs": 0.6, "weight_cibil": 0.4, "next": "credit_engine" },
+          "on_false": { "weight_hrs": 0.4, "weight_cibil": 0.6, "next": "credit_engine" }
+        },
+        {
+          "node_id": "credit_engine",
+          "type": "tool_call",
+          "display": "Tool — Credit Engine (LightGBM)",
+          "tool": "credit_engine_api",
+          "input": ["cibil_score", "hrs_band", "income_declared", "existing_emis", "weight_hrs", "weight_cibil"],
+          "output": {
+            "credit_limit_inr": "integer",
+            "credit_approved": "boolean",
+            "decision_rationale": "string",
+            "nfc_offline_limit_inr": 5000
+          },
+          "next": "credit_output_merge"
+        },
+        {
+          "node_id": "credit_output_merge",
+          "type": "output",
+          "display": "FinTech Agent Output",
+          "output": {
+            "credit_limit_inr": "integer",
+            "credit_approved": "boolean",
+            "decision_rationale": "string",
+            "nfc_offline_limit_inr": "integer"
+          },
+          "next": "phase_3_merge"
+        }
+      ]
+    },
+    {
+      "phase_id": "phase_2_insurtech",
+      "name": "InsurTech Agent — UBI + Policy Matching",
+      "description": "BERT policy matching, UBI premium recalculation, fraud scoring",
+      "agent": "insurtech_agent",
+      "nodes": [
+        {
+          "node_id": "bert_policy_match",
+          "type": "tool_call",
+          "display": "Tool — BERT Policy Matcher",
+          "tool": "bert_policy_matcher",
+          "input": ["user_health_profile_band", "age", "declared_conditions", "query_text"],
+          "output": { "matched_policies": "list[top_3]", "similarity_scores": "list[float]" },
+          "next": "ubi_calculator"
+        },
+        {
+          "node_id": "ubi_calculator",
+          "type": "tool_call",
+          "display": "Tool — UBI Premium Calculator",
+          "tool": "ubi_calculator",
+          "input": ["hrs_band", "hrs_delta", "claim_history_12m", "base_premium"],
+          "output": {
+            "ubi_premium_delta_pct": "float_range_-15_to_15",
+            "new_monthly_premium": "integer",
+            "auto_switch_recommended": "boolean",
+            "recommended_policy_id": "string"
+          },
+          "next": "fraud_detector"
+        },
+        {
+          "node_id": "fraud_detector",
+          "type": "tool_call",
+          "display": "Tool — Multi-Signal Fraud Detector",
+          "tool": "fraud_detector",
+          "signals": [
+            "wearable_accelerometer_at_claim_time",
+            "gps_location_vs_hospital_location",
+            "fhir_record_consistency",
+            "digilocker_doc_authenticity",
+            "claim_frequency_anomaly"
+          ],
+          "output": {
+            "fraud_score": "float_0_to_1",
+            "fraud_signals_fired": "list[string]",
+            "recommendation": "auto_approve|human_review|auto_reject"
+          },
+          "next": "insurtech_llm_explain"
+        },
+        {
+          "node_id": "insurtech_llm_explain",
+          "type": "llm",
+          "display": "LLM — Explain UBI Premium Delta",
+          "agent": "insurtech_agent",
+          "prompt_template": "Explain the UBI premium change of {ubi_premium_delta_pct}% based on HRS band '{hrs_band}' in simple language for the user. Include IRDAI disclaimers.",
+          "next": "insurtech_output_merge"
+        },
+        {
+          "node_id": "insurtech_output_merge",
+          "type": "output",
+          "display": "InsurTech Agent Output",
+          "output": {
+            "matched_policies": "list",
+            "ubi_premium_delta_pct": "float",
+            "new_monthly_premium": "integer",
+            "fraud_score": "float",
+            "fraud_recommendation": "string",
+            "premium_explanation": "string"
+          },
+          "next": "phase_3_merge"
+        }
+      ]
+    },
+    {
+      "phase_id": "phase_2_claim",
+      "name": "Claim Agent — Cashless Claim Processing",
+      "description": "End-to-end claim: FHIR validation, hospital auth, fraud check, TPA, approval",
+      "agent": "claim_agent",
+      "nodes": [
+        {
+          "node_id": "fhir_claim_processor",
+          "type": "tool_call",
+          "display": "Tool — FHIR Claim Processor",
+          "tool": "fhir_claim_processor",
+          "standard": "HL7_FHIR_R4",
+          "input": ["abha_id", "hospital_id", "admission_diagnosis_code", "estimated_amount_inr"],
+          "output": { "claim_ref_id": "string", "fhir_claim_object": "object" },
+          "next": "hospital_auth_api"
+        },
+        {
+          "node_id": "hospital_auth_api",
+          "type": "tool_call",
+          "display": "Tool — Hospital Auth API (<500ms)",
+          "tool": "hospital_auth_api",
+          "sla_ms": 500,
+          "input": ["claim_ref_id", "credit_limit_inr", "active_policy_id"],
+          "output": {
+            "auth_granted": "boolean",
+            "payment_guarantee_inr": "integer",
+            "bed_allocation_confirmed": "boolean"
+          },
+          "next": "claim_fraud_check"
+        },
+        {
+          "node_id": "claim_fraud_check",
+          "type": "condition",
+          "display": "Condition — Fraud Score Gate",
+          "condition": "fraud_score < 0.3",
+          "on_true": { "next": "claim_auto_approve" },
+          "on_false": {
+            "condition_2": "fraud_score > 0.7",
+            "on_true_2": { "next": "claim_auto_reject" },
+            "on_false_2": { "next": "human_handoff" }
+          }
+        },
+        {
+          "node_id": "claim_auto_approve",
+          "type": "tool_call",
+          "display": "Tool — Claim Auto-Approve",
+          "tool": "claim_approver",
+          "sla_hours": 2,
+          "output": { "claim_status": "approved", "settlement_amount_inr": "integer" },
+          "next": "claim_output_merge"
+        },
+        {
+          "node_id": "claim_auto_reject",
+          "type": "tool_call",
+          "display": "Tool — Claim Reject",
+          "tool": "claim_approver",
+          "output": { "claim_status": "rejected", "rejection_reason": "string" },
+          "next": "claim_output_merge"
+        },
+        {
+          "node_id": "human_handoff",
+          "type": "interrupt",
+          "display": "Human Handoff (Underwriter)",
+          "agent": "human_handoff_agent",
+          "langgraph_interrupt": true,
+          "resume_via": "POST /lg/resume/{thread_id}",
+          "notifications": ["slack_oncall", "email_underwriter"],
+          "next": "claim_output_merge"
+        },
+        {
+          "node_id": "claim_output_merge",
+          "type": "output",
+          "display": "Claim Agent Output",
+          "output": {
+            "claim_ref_id": "string",
+            "claim_status": "approved|rejected|pending_review",
+            "settlement_amount_inr": "integer",
+            "hospital_auth_granted": "boolean"
+          },
+          "next": "phase_3_merge"
+        }
+      ]
+    },
+    {
+      "phase_id": "phase_2_faq",
+      "name": "FAQ & Knowledge Agent",
+      "agent": "faq_agent",
+      "nodes": [
+        {
+          "node_id": "faq_retriever",
+          "type": "tool_call",
+          "display": "Tool — Semantic FAQ Retrieval",
+          "tool": "faq_retriever",
+          "index": "shared_faq_policy_faiss",
+          "top_k": 3,
+          "output": { "retrieved_passages": "list[top_3]", "source_ids": "list[string]" },
+          "next": "faq_loop"
+        },
+        {
+          "node_id": "faq_loop",
+          "type": "loop",
+          "display": "Loop — FAQ Passage Processing",
+          "max_iterations": 3,
+          "exit_condition": "all_passages_processed OR confidence > 0.9",
+          "accumulator": "list[AnswerChunk]",
+          "next": "faq_output_merge"
+        },
+        {
+          "node_id": "faq_output_merge",
+          "type": "output",
+          "display": "FAQ Agent Output",
+          "output": { "answer_chunks": "list", "source_attributions": "list" },
+          "next": "phase_3_merge"
+        }
+      ]
+    },
+    {
+      "phase_id": "phase_3_synthesis",
+      "name": "Merge, Synthesis & Evaluation",
+      "nodes": [
+        {
+          "node_id": "phase_3_merge",
+          "type": "merge",
+          "display": "Merge / Join",
+          "description": "Aggregate all active agent branch outputs. Priority: claim > insurtech > fintech > healthtech > faq",
+          "priority_order": ["claim_agent", "insurtech_agent", "fintech_agent", "healthtech_agent", "faq_agent"],
+          "conflict_resolution": "higher_confidence_wins",
+          "timeout_seconds": 5,
+          "on_timeout": "use_partial_results_with_staleness_flag",
+          "next": "llm_synthesis"
+        },
+        {
+          "node_id": "llm_synthesis",
+          "type": "llm",
+          "display": "LLM — Final Synthesis",
+          "model": "claude-sonnet-4-20250514",
+          "temperature": 0.4,
+          "max_tokens_by_channel": {
+            "app": 800,
+            "whatsapp": 400,
+            "nfc": 200
+          },
+          "prompt_template": "You are SmartCover's main response agent. Use the agent results below to write a response for channel: {channel}. Rules: (1) Never make promises about coverage not confirmed by the InsurTech agent. (2) For claim queries, always state the claim reference ID. (3) Keep language simple — user is {language}-speaking. (4) Tone: warm, empowering, factual. Results: {merged_context}",
+          "next": "evaluator_guardrail"
+        },
+        {
+          "node_id": "evaluator_guardrail",
+          "type": "evaluator",
+          "display": "Evaluator / Guardrail",
+          "checks": [
+            {
+              "name": "factual_grounding",
+              "description": "Response facts must be a subset of agent tool outputs",
+              "pass_threshold": 0.85
+            },
+            {
+              "name": "irdai_compliance",
+              "description": "Required disclaimers present, no coverage guarantees without confirmation",
+              "pass_threshold": 1.0
+            },
+            {
+              "name": "toxicity",
+              "description": "Anthropic safety classifier below threshold",
+              "pass_threshold": 0.95
+            }
+          ],
+          "run_parallel": true,
+          "overall_pass_threshold": 0.85,
+          "on_pass": "output_formatter",
+          "on_fail": "retry_fallback"
+        },
+        {
+          "node_id": "retry_fallback",
+          "type": "retry",
+          "display": "Retry / Fallback",
+          "max_retries": 3,
+          "backoff_seconds": [1, 2, 4],
+          "on_all_fail": "safe_fallback_response",
+          "safe_fallback": "I wasn't able to process your request automatically. Your reference is {ref_id}. Our team will contact you within 2 hours. For emergencies: tap your SmartCover card at any partner hospital.",
+          "next": "evaluator_guardrail"
+        }
+      ]
+    },
+    {
+      "phase_id": "phase_4_delivery",
+      "name": "Format, Persist & Deliver",
+      "nodes": [
+        {
+          "node_id": "output_formatter",
+          "type": "formatter",
+          "display": "Output Formatter",
+          "formats": {
+            "app": { "schema": "{ title, body, cta, claim_ref }", "type": "JSON" },
+            "whatsapp": { "schema": "plain_text", "max_chars": 1600, "emoji_allowed": true },
+            "nfc": { "schema": "2_lines_max_40_chars_each", "type": "minimal" },
+            "hospital_fhir": { "schema": "HL7_ClaimResponse_R4", "type": "FHIR" },
+            "insurer_api": { "schema": "risk_signal_JSON", "type": "JSON" }
+          },
+          "inject_metadata": ["response_id", "agent_trace_id"],
+          "next": "memory_save"
+        },
+        {
+          "node_id": "memory_save",
+          "type": "memory_write",
+          "display": "Memory Save (async)",
+          "async": true,
+          "writes": {
+            "redis": "conversation_turn (TTL 72hr)",
+            "abha_fhir": "Encounter record (if claim)",
+            "credit_store": "HRS delta signal (if significant)",
+            "insurtech_store": "UBI recalc flag"
+          },
+          "next": "custom_side_effects"
+        },
+        {
+          "node_id": "custom_side_effects",
+          "type": "custom",
+          "display": "Custom Code — Kafka Events",
+          "async": true,
+          "kafka_events": {
+            "claim.completed": "claim-events",
+            "credit.checked": "credit-events",
+            "premium.recalculated": "ubi-events",
+            "health.queried": "health-events"
+          },
+          "side_effects": [
+            "nfc_card_se_update_if_credit_limit_changed",
+            "ubi_recalc_job_if_hrs_delta_gt_30",
+            "hospital_payment_initiation_if_claim_approved"
+          ],
+          "next": "output_delivery"
+        },
+        {
+          "node_id": "output_delivery",
+          "type": "end",
+          "display": "Output Node",
+          "delivery_endpoints": {
+            "app": "FCM/APNs push + in-app API",
+            "whatsapp": "Meta Business API",
+            "nfc_hospital": "FHIR callback webhook",
+            "insurer": "REST webhook subscription"
+          },
+          "marks_thread": "COMPLETED",
+          "next": "audit_log"
+        },
+        {
+          "node_id": "audit_log",
+          "type": "note",
+          "display": "Audit Log (LangSmith)",
+          "contents": [
+            "full_node_execution_timeline",
+            "all_llm_call_inputs_outputs",
+            "tool_call_results",
+            "evaluator_scores",
+            "memory_operations",
+            "retry_history",
+            "delivery_confirmation"
+          ],
+          "retention": {
+            "langsmith_days": 90,
+            "kafka_s3_archive_years": 7
+          }
+        }
+      ]
+    }
+  ]
+}
