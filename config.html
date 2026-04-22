@@ -1,0 +1,3192 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartCover — Configuration-as-Code Workflow</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0a0e1a;
+        --surface: #111827;
+        --surface2: #1a2235;
+        --border: #1e2d45;
+        --border2: #263550;
+        --accent: #00d4aa;
+        --accent2: #3b82f6;
+        --accent3: #f59e0b;
+        --accent4: #ec4899;
+        --accent5: #8b5cf6;
+        --text: #e2e8f0;
+        --text2: #94a3b8;
+        --text3: #4a6080;
+        --green: #10b981;
+        --red: #ef4444;
+        --yellow: #f59e0b;
+        --purple: #8b5cf6;
+        --pink: #ec4899;
+        --blue: #3b82f6;
+        --teal: #00d4aa;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: 'Syne', sans-serif;
+        min-height: 100vh;
+        overflow-x: hidden;
+      }
+      code,
+      .mono {
+        font-family: 'JetBrains Mono', monospace;
+      }
+
+      /* Header */
+      .hdr {
+        background: linear-gradient(135deg, #0a0e1a 0%, #0d1b2e 100%);
+        border-bottom: 1px solid var(--border);
+        padding: 0 24px;
+        display: flex;
+        align-items: center;
+        gap: 0;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+      }
+      .hdr-logo {
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: -0.5px;
+        background: linear-gradient(90deg, var(--teal), var(--blue));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        padding: 14px 20px 14px 0;
+        border-right: 1px solid var(--border);
+        margin-right: 20px;
+      }
+      .hdr-tabs {
+        display: flex;
+        gap: 2px;
+        flex: 1;
+      }
+      .tab {
+        padding: 10px 16px;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        color: var(--text3);
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        transition: all 0.2s;
+        text-transform: uppercase;
+        white-space: nowrap;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .tab:hover {
+        color: var(--text2);
+      }
+      .tab.active {
+        color: var(--accent);
+        border-bottom-color: var(--accent);
+      }
+      .tab-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+      }
+      .hdr-badge {
+        font-size: 10px;
+        padding: 3px 10px;
+        border-radius: 20px;
+        background: rgba(0, 212, 170, 0.1);
+        color: var(--teal);
+        border: 1px solid rgba(0, 212, 170, 0.2);
+        font-family: 'JetBrains Mono', monospace;
+        font-weight: 500;
+        margin-left: auto;
+      }
+
+      /* Layout */
+      .layout {
+        display: flex;
+        height: calc(100vh - 50px);
+      }
+      .sidebar {
+        width: 280px;
+        min-width: 280px;
+        border-right: 1px solid var(--border);
+        background: var(--surface);
+        overflow-y: auto;
+        padding: 12px 0;
+      }
+      .main {
+        flex: 1;
+        overflow-y: auto;
+        padding: 24px;
+      }
+
+      /* Sidebar */
+      .sb-section {
+        margin-bottom: 4px;
+      }
+      .sb-label {
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text3);
+        padding: 8px 16px 4px;
+        display: block;
+      }
+      .sb-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 16px;
+        cursor: pointer;
+        border-left: 2px solid transparent;
+        transition: all 0.15s;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text2);
+      }
+      .sb-item:hover {
+        background: rgba(255, 255, 255, 0.03);
+        color: var(--text);
+      }
+      .sb-item.active {
+        border-left-color: var(--accent);
+        background: rgba(0, 212, 170, 0.05);
+        color: var(--teal);
+      }
+      .sb-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+      .sb-sub {
+        font-size: 10px;
+        color: var(--text3);
+        margin-left: 18px;
+      }
+
+      /* Page views */
+      .view {
+        display: none;
+      }
+      .view.active {
+        display: block;
+      }
+
+      /* Page header */
+      .page-hdr {
+        margin-bottom: 24px;
+      }
+      .page-title {
+        font-size: 28px;
+        font-weight: 800;
+        letter-spacing: -1px;
+      }
+      .page-sub {
+        font-size: 13px;
+        color: var(--text2);
+        margin-top: 6px;
+      }
+
+      /* Config File Viewer */
+      .file-viewer {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        margin-bottom: 20px;
+      }
+      .file-hdr {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 16px;
+        background: var(--surface2);
+        border-bottom: 1px solid var(--border);
+      }
+      .file-dots {
+        display: flex;
+        gap: 5px;
+      }
+      .file-dots span {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+      }
+      .file-name {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        color: var(--text2);
+      }
+      .file-badge {
+        margin-left: auto;
+        font-size: 10px;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-family: 'JetBrains Mono', monospace;
+      }
+      .file-body {
+        padding: 20px;
+        overflow-x: auto;
+      }
+      pre {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        line-height: 1.7;
+      }
+
+      /* JSON syntax highlighting */
+      .j-key {
+        color: #7dd3fc;
+      }
+      .j-str {
+        color: #86efac;
+      }
+      .j-num {
+        color: #fca5a5;
+      }
+      .j-bool {
+        color: #c084fc;
+      }
+      .j-null {
+        color: #94a3b8;
+      }
+      .j-brk {
+        color: #64748b;
+      }
+
+      /* Workflow Canvas */
+      .pipeline {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        position: relative;
+      }
+      .phase-block {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        margin-bottom: 12px;
+        overflow: hidden;
+        transition: border-color 0.2s;
+      }
+      .phase-block:hover {
+        border-color: var(--border2);
+      }
+      .phase-hdr {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 16px;
+        cursor: pointer;
+        user-select: none;
+      }
+      .phase-num {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        font-weight: 700;
+        flex-shrink: 0;
+      }
+      .phase-title {
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .phase-desc {
+        font-size: 11px;
+        color: var(--text3);
+        margin-left: auto;
+      }
+      .phase-toggle {
+        margin-left: 8px;
+        color: var(--text3);
+        font-size: 14px;
+        transition: transform 0.2s;
+      }
+      .phase-toggle.open {
+        transform: rotate(180deg);
+      }
+      .phase-body {
+        padding: 0 16px 16px;
+        display: none;
+      }
+      .phase-body.open {
+        display: block;
+      }
+
+      /* Node grid */
+      .node-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 12px;
+      }
+      .wf-node {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 14px;
+        cursor: pointer;
+        transition: all 0.2s;
+        min-width: 180px;
+        flex: 1;
+        max-width: 280px;
+        position: relative;
+      }
+      .wf-node:hover {
+        border-color: var(--border2);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      }
+      .wf-node.selected {
+        border-color: var(--accent);
+        background: rgba(0, 212, 170, 0.04);
+      }
+      .node-type-badge {
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        padding: 2px 7px;
+        border-radius: 10px;
+        display: inline-block;
+        margin-bottom: 6px;
+      }
+      .wf-node-title {
+        font-size: 12px;
+        font-weight: 700;
+        margin-bottom: 3px;
+      }
+      .wf-node-desc {
+        font-size: 10px;
+        color: var(--text3);
+        line-height: 1.5;
+      }
+      .wf-arrow {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4px;
+        color: var(--text3);
+        font-size: 11px;
+      }
+
+      /* Node detail panel */
+      .detail-panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        margin-top: 20px;
+        overflow: hidden;
+      }
+      .dp-hdr {
+        padding: 14px 20px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .dp-title {
+        font-size: 15px;
+        font-weight: 700;
+      }
+      .dp-agent {
+        font-size: 11px;
+        color: var(--text3);
+        margin-left: auto;
+      }
+      .dp-body {
+        padding: 20px;
+      }
+      .dp-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin-top: 12px;
+      }
+      .dp-card {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px 14px;
+      }
+      .dp-card-label {
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--text3);
+        margin-bottom: 6px;
+      }
+      .dp-card-val {
+        font-size: 11px;
+        color: var(--text2);
+        line-height: 1.6;
+        font-family: 'JetBrains Mono', monospace;
+      }
+
+      /* HRS Matrix */
+      .matrix-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .matrix-card {
+        background: var(--surface2);
+        border-radius: 10px;
+        padding: 16px;
+        border: 1px solid var(--border);
+      }
+      .matrix-card h4 {
+        font-size: 12px;
+        font-weight: 700;
+        margin-bottom: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .metric-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 0;
+        border-bottom: 1px solid var(--border);
+        font-size: 11px;
+      }
+      .metric-row:last-child {
+        border-bottom: none;
+      }
+      .metric-name {
+        color: var(--text2);
+      }
+      .metric-weight {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .band-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 10px;
+        border-radius: 6px;
+        margin-bottom: 6px;
+      }
+      .band-label {
+        font-weight: 700;
+        font-size: 12px;
+        min-width: 90px;
+      }
+      .band-range {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10px;
+        color: var(--text3);
+      }
+      .band-delta {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10px;
+        margin-left: auto;
+      }
+      .band-credit {
+        font-size: 10px;
+        color: var(--text3);
+      }
+      .privacy-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-size: 10px;
+        font-weight: 600;
+        margin: 3px;
+      }
+      .never-list {
+        list-style: none;
+      }
+      .never-list li {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 0;
+        font-size: 11px;
+        color: var(--text2);
+        font-family: 'JetBrains Mono', monospace;
+        border-bottom: 1px solid var(--border);
+      }
+      .never-list li::before {
+        content: '✕';
+        color: var(--red);
+        font-size: 11px;
+      }
+
+      /* Params view */
+      .param-section {
+        margin-bottom: 20px;
+      }
+      .param-section h3 {
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--text3);
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .param-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .param-table th {
+        text-align: left;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text3);
+        padding: 6px 12px;
+        background: var(--surface2);
+        border-bottom: 1px solid var(--border);
+      }
+      .param-table td {
+        padding: 8px 12px;
+        font-size: 11px;
+        border-bottom: 1px solid rgba(30, 45, 69, 0.5);
+      }
+      .param-table tr:hover td {
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .param-key {
+        font-family: 'JetBrains Mono', monospace;
+        color: #7dd3fc;
+      }
+      .param-val {
+        font-family: 'JetBrains Mono', monospace;
+        color: #86efac;
+      }
+      .param-desc {
+        color: var(--text3);
+        font-size: 10px;
+      }
+      .flag-on {
+        color: var(--green);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+      }
+      .flag-off {
+        color: var(--red);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+      }
+
+      /* Stats row */
+      .stats-row {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+      .stat-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 14px 16px;
+      }
+      .stat-val {
+        font-size: 22px;
+        font-weight: 800;
+        letter-spacing: -1px;
+      }
+      .stat-label {
+        font-size: 10px;
+        color: var(--text3);
+        margin-top: 2px;
+      }
+
+      /* Scrollbar */
+      ::-webkit-scrollbar {
+        width: 5px;
+        height: 5px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--border);
+        border-radius: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="hdr">
+      <div class="hdr-logo">SMARTCOVER</div>
+      <div class="hdr-tabs">
+        <div class="tab active" onclick="setView('workflow')" id="tab-workflow">
+          <span class="tab-dot" style="background: #00d4aa"></span> Workflow
+        </div>
+        <div class="tab" onclick="setView('health')" id="tab-health">
+          <span class="tab-dot" style="background: #10b981"></span> Health
+          Matrix
+        </div>
+        <div class="tab" onclick="setView('agents')" id="tab-agents">
+          <span class="tab-dot" style="background: #3b82f6"></span> agents.json
+        </div>
+        <div class="tab" onclick="setView('wfjson')" id="tab-wfjson">
+          <span class="tab-dot" style="background: #f59e0b"></span>
+          workflow.json
+        </div>
+        <div class="tab" onclick="setView('params')" id="tab-params">
+          <span class="tab-dot" style="background: #8b5cf6"></span> params.json
+        </div>
+      </div>
+      <div class="hdr-badge">Config-as-Code v1.0.0</div>
+    </div>
+
+    <div class="layout">
+      <!-- SIDEBAR -->
+      <div class="sidebar">
+        <span class="sb-label">Core Files</span>
+        <div
+          class="sb-item active"
+          onclick="setView('workflow')"
+          id="sb-workflow"
+        >
+          <span class="sb-dot" style="background: #00d4aa"></span> Pipeline
+          Workflow
+        </div>
+        <div class="sb-item" onclick="setView('health')" id="sb-health">
+          <span class="sb-dot" style="background: #10b981"></span> Health
+          Scoring Matrix
+        </div>
+
+        <span class="sb-label">Config Files</span>
+        <div class="sb-item" onclick="setView('agents')" id="sb-agents">
+          <span class="sb-dot" style="background: #3b82f6"></span> agents.json
+          <span class="sb-sub" style="margin-left: auto; font-size: 9px"
+            >7 agents</span
+          >
+        </div>
+        <div class="sb-item" onclick="setView('wfjson')" id="sb-wfjson">
+          <span class="sb-dot" style="background: #f59e0b"></span> workflow.json
+          <span class="sb-sub" style="margin-left: auto; font-size: 9px"
+            >4 phases</span
+          >
+        </div>
+        <div class="sb-item" onclick="setView('params')" id="sb-params">
+          <span class="sb-dot" style="background: #8b5cf6"></span> params.json
+          <span class="sb-sub" style="margin-left: auto; font-size: 9px"
+            >Runtime</span
+          >
+        </div>
+
+        <span class="sb-label">Agents</span>
+        <div
+          class="sb-item"
+          onclick="
+            setView('workflow');
+            setTimeout(() => selectNode('orchestrator'), 100);
+          "
+        >
+          <span class="sb-dot" style="background: #f59e0b"></span> Orchestrator
+        </div>
+        <div
+          class="sb-item"
+          onclick="
+            setView('workflow');
+            setTimeout(() => selectNode('health_privacy_gate'), 100);
+          "
+        >
+          <span class="sb-dot" style="background: #10b981"></span> HealthTech
+          Agent
+        </div>
+        <div
+          class="sb-item"
+          onclick="
+            setView('workflow');
+            setTimeout(() => selectNode('cibil_api_call'), 100);
+          "
+        >
+          <span class="sb-dot" style="background: #3b82f6"></span> FinTech Agent
+        </div>
+        <div
+          class="sb-item"
+          onclick="
+            setView('workflow');
+            setTimeout(() => selectNode('bert_policy_match'), 100);
+          "
+        >
+          <span class="sb-dot" style="background: #f59e0b"></span> InsurTech
+          Agent
+        </div>
+        <div
+          class="sb-item"
+          onclick="
+            setView('workflow');
+            setTimeout(() => selectNode('fhir_claim_processor'), 100);
+          "
+        >
+          <span class="sb-dot" style="background: #ec4899"></span> Claim Agent
+        </div>
+        <div
+          class="sb-item"
+          onclick="
+            setView('workflow');
+            setTimeout(() => selectNode('faq_retriever'), 100);
+          "
+        >
+          <span class="sb-dot" style="background: #8b5cf6"></span> FAQ Agent
+        </div>
+      </div>
+
+      <!-- MAIN CONTENT -->
+      <div class="main">
+        <!-- ========== WORKFLOW VIEW ========== -->
+        <div class="view active" id="view-workflow">
+          <div class="page-hdr">
+            <div class="page-title">Pipeline Workflow</div>
+            <div class="page-sub">
+              LangGraph multi-agent pipeline — click any node to inspect its
+              config
+            </div>
+          </div>
+
+          <div class="stats-row">
+            <div class="stat-card">
+              <div class="stat-val" style="color: var(--teal)">7</div>
+              <div class="stat-label">Agents</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-val" style="color: var(--blue)">4</div>
+              <div class="stat-label">Phases</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-val" style="color: var(--yellow)">2 hrs</div>
+              <div class="stat-label">Claim SLA</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-val" style="color: var(--green)">DPDP ✓</div>
+              <div class="stat-label">Privacy Compliant</div>
+            </div>
+          </div>
+
+          <div class="pipeline">
+            <!-- PHASE 1 -->
+            <div class="phase-block">
+              <div class="phase-hdr" onclick="togglePhase('p1')">
+                <div
+                  class="phase-num"
+                  style="
+                    background: rgba(0, 212, 170, 0.15);
+                    color: var(--teal);
+                  "
+                >
+                  1
+                </div>
+                <div class="phase-title">User Intake & Context Loading</div>
+                <div class="phase-desc">Input → Memory → LLM → Classifier</div>
+                <div class="phase-toggle open" id="pt-p1">▼</div>
+              </div>
+              <div class="phase-body open" id="pb-p1">
+                <div class="node-grid">
+                  <div
+                    class="wf-node"
+                    onclick="selectNode('input')"
+                    id="wn-input"
+                  >
+                    <div
+                      class="node-type-badge"
+                      style="
+                        background: rgba(100, 116, 139, 0.15);
+                        color: #94a3b8;
+                      "
+                    >
+                      Entry
+                    </div>
+                    <div class="wf-node-title">Input Gateway</div>
+                    <div class="wf-node-desc">
+                      app · whatsapp · NFC tap · wearable alert
+                    </div>
+                  </div>
+                  <div
+                    class="wf-node"
+                    onclick="selectNode('memory_load')"
+                    id="wn-memory_load"
+                  >
+                    <div
+                      class="node-type-badge"
+                      style="
+                        background: rgba(0, 212, 170, 0.1);
+                        color: var(--teal);
+                      "
+                    >
+                      Memory Read
+                    </div>
+                    <div class="wf-node-title">Memory / Context Load</div>
+                    <div class="wf-node-desc">
+                      HRS history · credit state · active policy · prior turns
+                    </div>
+                  </div>
+                  <div
+                    class="wf-node"
+                    onclick="selectNode('llm_context_injection')"
+                    id="wn-llm_context_injection"
+                  >
+                    <div
+                      class="node-type-badge"
+                      style="
+                        background: rgba(139, 92, 246, 0.1);
+                        color: var(--purple);
+                      "
+                    >
+                      LLM
+                    </div>
+                    <div class="wf-node-title">LLM — Context Injection</div>
+                    <div class="wf-node-desc">
+                      System prompt + context → structured query
+                    </div>
+                  </div>
+                  <div
+                    class="wf-node"
+                    onclick="selectNode('classifier_router')"
+                    id="wn-classifier_router"
+                  >
+                    <div
+                      class="node-type-badge"
+                      style="
+                        background: rgba(245, 158, 11, 0.1);
+                        color: var(--yellow);
+                      "
+                    >
+                      Router
+                    </div>
+                    <div class="wf-node-title">Classifier / Router</div>
+                    <div class="wf-node-desc">
+                      Routes to 1–5 agent branches in parallel
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- PHASE 2 PARALLEL AGENTS -->
+            <div class="phase-block">
+              <div class="phase-hdr" onclick="togglePhase('p2')">
+                <div
+                  class="phase-num"
+                  style="
+                    background: rgba(59, 130, 246, 0.15);
+                    color: var(--blue);
+                  "
+                >
+                  2
+                </div>
+                <div class="phase-title">
+                  Multi-Agent Domain Routing (Parallel)
+                </div>
+                <div class="phase-desc">Up to 5 agents run simultaneously</div>
+                <div class="phase-toggle open" id="pt-p2">▼</div>
+              </div>
+              <div class="phase-body open" id="pb-p2">
+                <!-- HealthTech -->
+                <div
+                  style="
+                    border: 1px solid rgba(16, 185, 129, 0.2);
+                    border-radius: 8px;
+                    padding: 12px;
+                    margin-bottom: 12px;
+                  "
+                >
+                  <div
+                    style="
+                      font-size: 10px;
+                      font-weight: 700;
+                      color: #10b981;
+                      letter-spacing: 0.08em;
+                      text-transform: uppercase;
+                      margin-bottom: 8px;
+                    "
+                  >
+                    🟢 HealthTech Agent
+                  </div>
+                  <div class="node-grid">
+                    <div
+                      class="wf-node"
+                      onclick="selectNode('health_privacy_gate')"
+                      id="wn-health_privacy_gate"
+                    >
+                      <div
+                        class="node-type-badge"
+                        style="
+                          background: rgba(239, 68, 68, 0.1);
+                          color: var(--red);
+                        "
+                      >
+                        Privacy Gate
+                      </div>
+                      <div class="wf-node-title">🔒 Privacy Gate (DPDP)</div>
+                      <div class="wf-node-desc">
+                        Consent check · block raw biometrics · DPDP 2023
+                      </div>
+                    </div>
+                    <div
+                      class="wf-node"
+                      onclick="selectNode('google_health_api_call')"
+                      id="wn-google_health_api_call"
+                    >
+                      <div
+                        class="node-type-badge"
+                        style="
+                          background: rgba(16, 185, 129, 0.1);
+                          color: var(--green);
+                        "
+                      >
+                        Tool Call
+                      </div>
+                      <div class="wf-node-title">Google Fit / Health API</div>
+                      <div class="wf-node-desc">
+                        On-device only · 7 aggregated metrics · no raw series
+                      </div>
+                    </div>
+                    <div
+                      class="wf-node"
+                      onclick="selectNode('fl_model_inference')"
+                      id="wn-fl_model_inference"
+                    >
+                      <div
+                        class="node-type-badge"
+                        style="
+                          background: rgba(16, 185, 129, 0.1);
+                          color: var(--green);
+                        "
+                      >
+                        FL Model
+                      </div>
+                      <div class="wf-node-title">
+                        TF Lite FL — HRS Inference
+                      </div>
+                      <div class="wf-node-desc">
+                        On-device · HRS 0–1000 · only band leaves device
+                      </div>
+                    </div>
+                    <div
+                      class="wf-node"
+                      onclick="selectNode('abha_fhir_lookup')"
+                      id="wn-abha_fhir_lookup"
+                    >
+                      <div
+                        class="node-type-badge"
+                        style="
+                          background: rgba(16, 185, 129, 0.1);
+                          color: var(--green);
+                        "
+                      >
+                        Knowledge
+                      </div>
+                      <div class="wf-node-title">ABHA / ABDM FHIR Lookup</div>
+                      <div class="wf-node-desc">
+                        Conditions · allergies · immunizations · minimal fields
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- FinTech -->
+                <div
+                  style="
+                    border: 1px solid rgba(59, 130, 246, 0.2);
+                    border-radius: 8px;
+                    padding: 12px;
+                    margin-bottom: 12px;
+                  "
+                >
+                  <div
+                    style="
+                      font-size: 10px;
+                      font-weight: 700;
+                      color: #3b82f6;
+                      letter-spacing: 0.08em;
+                      text-transform: uppercase;
+                      margin-bottom: 8px;
+                    "
+                  >
+                    🔵 FinTech Agent
+                  </div>
+                  <div class="node-grid">
+                    <div
+                      class="wf-node"
+                      onclick="selectNode('cibil_api_call')"
+                      id="wn-cibil_api_call"
+                    >
+                      <div
+                        class="node-type-badge"
+                        style="
+                          background: rgba(59, 130, 246, 0.1);
+                          color: var(--blue);
+                        "
+                      >
+                        Tool Call
+                      </div>
+                      <div class="wf-node-title">CIBIL API</div>
+                      <div class="wf-node-desc">
+                        Credit score · thin file detection
+                      </div>
+                    </div>
+                    <div
+                      class="wf-node"
+                      onclick="selectNode('credit_thin_file_condition')"
+                      id="wn-credit_thin_file_condition"
+                    >
+                      <div
+                        class="node-type-badge"
+                        style="
+                          background: rgba(245, 158, 11, 0.1);
+                          color: var(--yellow);
+                        "
+                      >
+                        Condition
+                      </div>
+                      <div class="wf-node-title">Thin File? → Weight HRS</div>
+                      <div class="wf-node-desc">
+                        CIBIL &lt; 650: HRS weight 60% · else 40%
+                      </div>
+                    </div>
+                    <div
+                      class="wf-node"
+                      onclick="selectNode('credit_engine')"
+                      id="wn-credit_engine"
+                    >
+                      <div
+                        class="node-type-badge"
+                        style="
+                          background: rgba(59, 130, 246, 0.1);
+                          color: var(--blue);
+                        "
+                      >
+                        Tool Call
+                      </div>
+                      <div class="wf-node-title">Credit Engine (LightGBM)</div>
+                      <div class="wf-node-desc">
+                        Dual score → ₹15K–₹5L credit limit
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- InsurTech -->
+                <div
+                  style="
+                    border: 1px solid rgba(245, 158, 11, 0.2);
+                    border-radius: 8px;
+                    padding: 12px;
+                    margin-bottom: 12px;
+                  "
+                >
+                  <div
+                    style="
+                      font-size: 10px;
+                      font-weight: 700;
+                      color: #f59e0b;
+                      letter-spacing: 0.08em;
+                      text-transform: uppercase;
+                      margin-bottom: 8px;
+                    "
+                  >
+                    🟡 InsurTech Agent
+                  </div>
+                  <div class="node-grid">
+                    <div
+                      class="wf-node"
+                      onclick="selectNode('bert_policy_match')"
+                      id="wn-bert_policy_match"
+                    >
+                      <div
+                        class="node-type-badge"
+                        style="
+                          background: rgba(245, 158, 11, 0.1);
+                          color: var(--yellow);
+                        "
+                      >
+                        Tool Call
+                      </div>
+                      <div class="wf-node-title">BERT Policy Matcher</div>
+                      <div class="wf-node-desc">
+                        FAISS · top-3 policies · min similarity 0.72
+                      </div>
+                    </div>
+                    <div
+                      class="wf-node"
+                      onclick="selectNode('ubi_calculator')"
+                      id="wn-ubi_calculator"
+                    >
+                      <div
+                        class="node-type-badge"
+                        style="
+                          background: rgba(245, 158, 11, 0.1);
+                          color: var(--yellow);
+                        "
+                      >
+                        Tool Call
+                      </div>
+                      <div class="wf-node-title">UBI Premium Calculator</div>
+                      <div class="wf-node-desc">
+                        ±15% monthly · auto-switch quarterly
+                      </div>
+                    </div>
+                    <div
+                      class="wf-node"
+                      onclick="selectNode('fraud_detector')"
+                      id="wn-fraud_detector"
+                    >
+                      <div
+                        class="node-type-badge"
+                        style="
+                          background: rgba(239, 68, 68, 0.1);
+                          color: var(--red);
+                        "
+                      >
+                        Fraud Detection
+                      </div>
+                      <div class="wf-node-title">
+                        Multi-Signal Fraud Detector
+                      </div>
+                      <div class="wf-node-desc">
+                        5 signals · score 0–1 · 70% reduction target
+                      </div>
+                    </div>
+                    <div
+                      class="wf-node"
+                      onclick="selectNode('insurtech_llm_explain')"
+                      id="wn-insurtech_llm_explain"
+                    >
+                      <div
+                        class="node-type-badge"
+                        style="
+                          background: rgba(139, 92, 246, 0.1);
+                          color: var(--purple);
+                        "
+                      >
+                        LLM
+                      </div>
+                      <div class="wf-node-title">LLM — UBI Explanation</div>
+                      <div class="wf-node-desc">
+                        Explain premium delta · IRDAI disclaimers
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Claim -->
+                <div
+                  style="
+                    border: 1px solid rgba(236, 72, 153, 0.2);
+                    border-radius: 8px;
+                    padding: 12px;
+                    margin-bottom: 12px;
+                  "
+                >
+                  <div
+                    style="
+                      font-size: 10px;
+                      font-weight: 700;
+                      color: #ec4899;
+                      letter-spacing: 0.08em;
+                      text-transform: uppercase;
+                      margin-bottom: 8px;
+                    "
+                  >
+                    🩷 Claim Agent
+                  </div>
+                  <div class="node-grid">
+                    <div
+                      class="wf-node"
+                      onclick="selectNode('fhir_claim_processor')"
+                      id="wn-fhir_claim_processor"
+                    >
+                      <div
+                        class="node-type-badge"
+                        style="
+                          background: rgba(236, 72, 153, 0.1);
+                          color: var(--pink);
+                        "
+                      >
+                        Tool Call
+                      </div>
+                      <div class="wf-node-title">FHIR Claim Processor</div>
+                      <div class="wf-node-desc">
+                        HL7 FHIR R4 · claim_ref_id generated
+                      </div>
+                    </div>
+                    <div
+                      class="wf-node"
+                      onclick="selectNode('hospital_auth_api')"
+                      id="wn-hospital_auth_api"
+                    >
+                      <div
+                        class="node-type-badge"
+                        style="
+                          background: rgba(236, 72, 153, 0.1);
+                          color: var(--pink);
+                        "
+                      >
+                        Tool Call
+                      </div>
+                      <div class="wf-node-title">Hospital Auth API</div>
+                      <div class="wf-node-desc">
+                        &lt;500ms SLA · payment guarantee on admission
+                      </div>
+                    </div>
+                    <div
+                      class="wf-node"
+                      onclick="selectNode('claim_fraud_check')"
+                      id="wn-claim_fraud_check"
+                    >
+                      <div
+                        class="node-type-badge"
+                        style="
+                          background: rgba(245, 158, 11, 0.1);
+                          color: var(--yellow);
+                        "
+                      >
+                        Condition
+                      </div>
+                      <div class="wf-node-title">Fraud Score Gate</div>
+                      <div class="wf-node-desc">
+                        &lt;0.3 auto-approve · 0.3–0.7 human · &gt;0.7 reject
+                      </div>
+                    </div>
+                    <div
+                      class="wf-node"
+                      onclick="selectNode('human_handoff')"
+                      id="wn-human_handoff"
+                    >
+                      <div
+                        class="node-type-badge"
+                        style="
+                          background: rgba(239, 68, 68, 0.1);
+                          color: var(--red);
+                        "
+                      >
+                        Interrupt
+                      </div>
+                      <div class="wf-node-title">Human Handoff</div>
+                      <div class="wf-node-desc">
+                        LangGraph interrupt() · 4hr SLA · underwriter review
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- FAQ -->
+                <div
+                  style="
+                    border: 1px solid rgba(139, 92, 246, 0.2);
+                    border-radius: 8px;
+                    padding: 12px;
+                  "
+                >
+                  <div
+                    style="
+                      font-size: 10px;
+                      font-weight: 700;
+                      color: #8b5cf6;
+                      letter-spacing: 0.08em;
+                      text-transform: uppercase;
+                      margin-bottom: 8px;
+                    "
+                  >
+                    🟣 FAQ Agent
+                  </div>
+                  <div class="node-grid">
+                    <div
+                      class="wf-node"
+                      onclick="selectNode('faq_retriever')"
+                      id="wn-faq_retriever"
+                    >
+                      <div
+                        class="node-type-badge"
+                        style="
+                          background: rgba(139, 92, 246, 0.1);
+                          color: var(--purple);
+                        "
+                      >
+                        Knowledge
+                      </div>
+                      <div class="wf-node-title">Semantic FAQ Retrieval</div>
+                      <div class="wf-node-desc">
+                        FAISS · multilingual-e5-small · top-3 passages
+                      </div>
+                    </div>
+                    <div
+                      class="wf-node"
+                      onclick="selectNode('faq_loop')"
+                      id="wn-faq_loop"
+                    >
+                      <div
+                        class="node-type-badge"
+                        style="
+                          background: rgba(139, 92, 246, 0.1);
+                          color: var(--purple);
+                        "
+                      >
+                        Loop
+                      </div>
+                      <div class="wf-node-title">FAQ Loop (max 3)</div>
+                      <div class="wf-node-desc">
+                        Process each passage → accumulate answer chunks
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- PHASE 3 -->
+            <div class="phase-block">
+              <div class="phase-hdr" onclick="togglePhase('p3')">
+                <div
+                  class="phase-num"
+                  style="
+                    background: rgba(139, 92, 246, 0.15);
+                    color: var(--purple);
+                  "
+                >
+                  3
+                </div>
+                <div class="phase-title">Merge, Synthesis & Evaluation</div>
+                <div class="phase-desc">Join → LLM → Guardrail → Retry</div>
+                <div class="phase-toggle open" id="pt-p3">▼</div>
+              </div>
+              <div class="phase-body open" id="pb-p3">
+                <div class="node-grid">
+                  <div
+                    class="wf-node"
+                    onclick="selectNode('phase_3_merge')"
+                    id="wn-phase_3_merge"
+                  >
+                    <div
+                      class="node-type-badge"
+                      style="
+                        background: rgba(0, 212, 170, 0.1);
+                        color: var(--teal);
+                      "
+                    >
+                      Merge
+                    </div>
+                    <div class="wf-node-title">Merge / Join</div>
+                    <div class="wf-node-desc">
+                      Priority order · 5s timeout · conflict resolution
+                    </div>
+                  </div>
+                  <div
+                    class="wf-node"
+                    onclick="selectNode('llm_synthesis')"
+                    id="wn-llm_synthesis"
+                  >
+                    <div
+                      class="node-type-badge"
+                      style="
+                        background: rgba(139, 92, 246, 0.1);
+                        color: var(--purple);
+                      "
+                    >
+                      LLM
+                    </div>
+                    <div class="wf-node-title">LLM — Final Synthesis</div>
+                    <div class="wf-node-desc">
+                      Channel-aware · IRDAI-compliant · warm tone
+                    </div>
+                  </div>
+                  <div
+                    class="wf-node"
+                    onclick="selectNode('evaluator_guardrail')"
+                    id="wn-evaluator_guardrail"
+                  >
+                    <div
+                      class="node-type-badge"
+                      style="
+                        background: rgba(239, 68, 68, 0.1);
+                        color: var(--red);
+                      "
+                    >
+                      Evaluator
+                    </div>
+                    <div class="wf-node-title">Evaluator / Guardrail</div>
+                    <div class="wf-node-desc">
+                      Factual · IRDAI compliance · toxicity — parallel checks
+                    </div>
+                  </div>
+                  <div
+                    class="wf-node"
+                    onclick="selectNode('retry_fallback')"
+                    id="wn-retry_fallback"
+                  >
+                    <div
+                      class="node-type-badge"
+                      style="
+                        background: rgba(245, 158, 11, 0.1);
+                        color: var(--yellow);
+                      "
+                    >
+                      Retry
+                    </div>
+                    <div class="wf-node-title">Retry / Fallback</div>
+                    <div class="wf-node-desc">
+                      max 3 retries · exponential backoff · safe fallback
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- PHASE 4 -->
+            <div class="phase-block">
+              <div class="phase-hdr" onclick="togglePhase('p4')">
+                <div
+                  class="phase-num"
+                  style="
+                    background: rgba(245, 158, 11, 0.15);
+                    color: var(--yellow);
+                  "
+                >
+                  4
+                </div>
+                <div class="phase-title">Format, Persist & Deliver</div>
+                <div class="phase-desc">
+                  Formatter → Memory → Kafka → Output → Audit
+                </div>
+                <div class="phase-toggle open" id="pt-p4">▼</div>
+              </div>
+              <div class="phase-body open" id="pb-p4">
+                <div class="node-grid">
+                  <div
+                    class="wf-node"
+                    onclick="selectNode('output_formatter')"
+                    id="wn-output_formatter"
+                  >
+                    <div
+                      class="node-type-badge"
+                      style="
+                        background: rgba(0, 212, 170, 0.1);
+                        color: var(--teal);
+                      "
+                    >
+                      Formatter
+                    </div>
+                    <div class="wf-node-title">Output Formatter</div>
+                    <div class="wf-node-desc">
+                      app JSON · WhatsApp · NFC 2-line · FHIR · insurer API
+                    </div>
+                  </div>
+                  <div
+                    class="wf-node"
+                    onclick="selectNode('memory_save')"
+                    id="wn-memory_save"
+                  >
+                    <div
+                      class="node-type-badge"
+                      style="
+                        background: rgba(0, 212, 170, 0.1);
+                        color: var(--teal);
+                      "
+                    >
+                      Memory Write
+                    </div>
+                    <div class="wf-node-title">Memory Save (async)</div>
+                    <div class="wf-node-desc">
+                      Redis · ABHA FHIR · credit store · UBI store
+                    </div>
+                  </div>
+                  <div
+                    class="wf-node"
+                    onclick="selectNode('custom_side_effects')"
+                    id="wn-custom_side_effects"
+                  >
+                    <div
+                      class="node-type-badge"
+                      style="
+                        background: rgba(139, 92, 246, 0.1);
+                        color: var(--purple);
+                      "
+                    >
+                      Custom Code
+                    </div>
+                    <div class="wf-node-title">Kafka Events + Side Effects</div>
+                    <div class="wf-node-desc">
+                      4 topics · NFC SE update · UBI job · payment init
+                    </div>
+                  </div>
+                  <div
+                    class="wf-node"
+                    onclick="selectNode('output_delivery')"
+                    id="wn-output_delivery"
+                  >
+                    <div
+                      class="node-type-badge"
+                      style="
+                        background: rgba(16, 185, 129, 0.1);
+                        color: var(--green);
+                      "
+                    >
+                      END
+                    </div>
+                    <div class="wf-node-title">Output Delivery</div>
+                    <div class="wf-node-desc">
+                      FCM · WhatsApp API · FHIR webhook · insurer webhook
+                    </div>
+                  </div>
+                  <div
+                    class="wf-node"
+                    onclick="selectNode('audit_log')"
+                    id="wn-audit_log"
+                  >
+                    <div
+                      class="node-type-badge"
+                      style="
+                        background: rgba(100, 116, 139, 0.1);
+                        color: #94a3b8;
+                      "
+                    >
+                      Audit
+                    </div>
+                    <div class="wf-node-title">Audit Log (LangSmith)</div>
+                    <div class="wf-node-desc">
+                      90d live · 7yr S3 archive · IRDAI compliant
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Node Detail Panel -->
+          <div class="detail-panel" id="detail-panel" style="display: none">
+            <div class="dp-hdr">
+              <div class="dp-title" id="dp-title"></div>
+              <div class="dp-agent" id="dp-agent"></div>
+            </div>
+            <div class="dp-body">
+              <div
+                style="
+                  font-size: 12px;
+                  color: var(--text2);
+                  line-height: 1.7;
+                  margin-bottom: 12px;
+                "
+                id="dp-desc"
+              ></div>
+              <div class="dp-grid" id="dp-grid"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========== HEALTH MATRIX VIEW ========== -->
+        <div class="view" id="view-health">
+          <div class="page-hdr">
+            <div class="page-title">Health Risk Scoring Matrix</div>
+            <div class="page-sub">
+              Google Health API → On-device FL → HRS Band → Premium & Credit
+              Impact
+            </div>
+          </div>
+
+          <div
+            style="
+              background: rgba(239, 68, 68, 0.08);
+              border: 1px solid rgba(239, 68, 68, 0.2);
+              border-radius: 10px;
+              padding: 12px 16px;
+              margin-bottom: 20px;
+              font-size: 12px;
+              color: #fca5a5;
+              display: flex;
+              gap: 10px;
+              align-items: center;
+            "
+          >
+            <span style="font-size: 16px">🔒</span>
+            <div>
+              <strong>Privacy-First Architecture:</strong> All computation runs
+              on-device via TensorFlow Lite. Only the HRS band (not any raw
+              metric) is ever transmitted. DPDP Act 2023 · ABDM compliant ·
+              Differential Privacy ε=1.0
+            </div>
+          </div>
+
+          <div class="matrix-grid">
+            <div class="matrix-card">
+              <h4 style="color: var(--green)">Google Health API Metrics</h4>
+              <div class="metric-row">
+                <span class="metric-name">Step Count (7d avg)</span>
+                <span class="metric-weight" style="color: var(--teal)"
+                  >20%</span
+                >
+              </div>
+              <div class="metric-row">
+                <span class="metric-name">Resting Heart Rate (30d avg)</span>
+                <span class="metric-weight" style="color: var(--teal)"
+                  >20%</span
+                >
+              </div>
+              <div class="metric-row">
+                <span class="metric-name">Sleep Duration (avg hrs)</span>
+                <span class="metric-weight" style="color: var(--teal)"
+                  >18%</span
+                >
+              </div>
+              <div class="metric-row">
+                <span class="metric-name">Active Minutes Daily</span>
+                <span class="metric-weight" style="color: var(--teal)"
+                  >17%</span
+                >
+              </div>
+              <div class="metric-row">
+                <span class="metric-name">Blood Oxygen (SpO₂)</span>
+                <span class="metric-weight" style="color: var(--teal)"
+                  >12%</span
+                >
+              </div>
+              <div class="metric-row">
+                <span class="metric-name">Stress Index Band</span>
+                <span class="metric-weight" style="color: var(--teal)">8%</span>
+              </div>
+              <div class="metric-row">
+                <span class="metric-name">BMI (computed)</span>
+                <span class="metric-weight" style="color: var(--teal)">5%</span>
+              </div>
+              <div
+                style="
+                  margin-top: 10px;
+                  padding: 8px;
+                  background: rgba(0, 212, 170, 0.05);
+                  border-radius: 6px;
+                  font-size: 10px;
+                  color: var(--teal);
+                "
+              >
+                ✓ All metrics aggregated on-device. No raw time-series data ever
+                leaves the device.
+              </div>
+            </div>
+
+            <div class="matrix-card">
+              <h4 style="color: var(--yellow)">HRS Bands → Business Impact</h4>
+              <div
+                class="band-row"
+                style="background: rgba(16, 185, 129, 0.08)"
+              >
+                <div>
+                  <div class="band-label" style="color: #10b981">Excellent</div>
+                  <div class="band-range">850 – 1000</div>
+                </div>
+                <div>
+                  <div class="band-delta" style="color: #10b981">
+                    -15% premium
+                  </div>
+                  <div class="band-credit" style="color: #10b981">
+                    +₹50,000 credit
+                  </div>
+                </div>
+              </div>
+              <div class="band-row" style="background: rgba(0, 212, 170, 0.06)">
+                <div>
+                  <div class="band-label" style="color: var(--teal)">Good</div>
+                  <div class="band-range">700 – 849</div>
+                </div>
+                <div>
+                  <div class="band-delta" style="color: var(--teal)">
+                    -8% premium
+                  </div>
+                  <div class="band-credit" style="color: var(--teal)">
+                    +₹25,000 credit
+                  </div>
+                </div>
+              </div>
+              <div
+                class="band-row"
+                style="background: rgba(100, 116, 139, 0.06)"
+              >
+                <div>
+                  <div class="band-label" style="color: var(--text2)">Fair</div>
+                  <div class="band-range">550 – 699</div>
+                </div>
+                <div>
+                  <div class="band-delta" style="color: var(--text2)">
+                    no change
+                  </div>
+                  <div class="band-credit" style="color: var(--text3)">
+                    base credit
+                  </div>
+                </div>
+              </div>
+              <div
+                class="band-row"
+                style="background: rgba(245, 158, 11, 0.06)"
+              >
+                <div>
+                  <div class="band-label" style="color: var(--yellow)">
+                    Moderate
+                  </div>
+                  <div class="band-range">400 – 549</div>
+                </div>
+                <div>
+                  <div class="band-delta" style="color: var(--yellow)">
+                    +8% premium
+                  </div>
+                  <div class="band-credit" style="color: var(--yellow)">
+                    -₹10,000 credit
+                  </div>
+                </div>
+              </div>
+              <div class="band-row" style="background: rgba(239, 68, 68, 0.06)">
+                <div>
+                  <div class="band-label" style="color: var(--red)">
+                    At Risk
+                  </div>
+                  <div class="band-range">0 – 399</div>
+                </div>
+                <div>
+                  <div class="band-delta" style="color: var(--red)">
+                    +15% premium
+                  </div>
+                  <div class="band-credit" style="color: var(--red)">
+                    -₹25,000 credit
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="matrix-card">
+              <h4 style="color: var(--red)">
+                Never Transmitted (Privacy Rules)
+              </h4>
+              <ul class="never-list">
+                <li>raw_heart_rate_series</li>
+                <li>raw_gps_coordinates</li>
+                <li>sleep_stage_breakdown</li>
+                <li>blood_glucose_readings</li>
+                <li>menstrual_cycle_data</li>
+                <li>mental_health_indicators</li>
+              </ul>
+              <div
+                style="
+                  margin-top: 10px;
+                  padding: 8px;
+                  background: rgba(239, 68, 68, 0.05);
+                  border-radius: 6px;
+                  font-size: 10px;
+                  color: #fca5a5;
+                "
+              >
+                ✕ Any data that could cause discrimination, loading, or
+                re-identification is blocked at device boundary.
+              </div>
+            </div>
+
+            <div class="matrix-card">
+              <h4 style="color: var(--blue)">Required Google API Scopes</h4>
+              <div
+                style="
+                  font-family: 'JetBrains Mono', monospace;
+                  font-size: 10px;
+                  line-height: 2;
+                "
+              >
+                <div style="color: #7dd3fc">fitness.activity.read</div>
+                <div style="color: #7dd3fc">fitness.heart_rate.read</div>
+                <div style="color: #7dd3fc">fitness.sleep.read</div>
+                <div style="color: #7dd3fc">fitness.oxygen_saturation.read</div>
+                <div style="color: #7dd3fc">fitness.body.read</div>
+              </div>
+              <div style="margin-top: 12px">
+                <div
+                  style="
+                    font-size: 10px;
+                    font-weight: 700;
+                    color: var(--text3);
+                    text-transform: uppercase;
+                    letter-spacing: 0.08em;
+                    margin-bottom: 6px;
+                  "
+                >
+                  Consent Model
+                </div>
+                <div
+                  class="privacy-pill"
+                  style="
+                    background: rgba(0, 212, 170, 0.1);
+                    color: var(--teal);
+                    border: 1px solid rgba(0, 212, 170, 0.2);
+                  "
+                >
+                  ✓ Per-metric granularity
+                </div>
+                <div
+                  class="privacy-pill"
+                  style="
+                    background: rgba(59, 130, 246, 0.1);
+                    color: var(--blue);
+                    border: 1px solid rgba(59, 130, 246, 0.2);
+                  "
+                >
+                  ✓ User can revoke anytime
+                </div>
+                <div
+                  class="privacy-pill"
+                  style="
+                    background: rgba(139, 92, 246, 0.1);
+                    color: var(--purple);
+                    border: 1px solid rgba(139, 92, 246, 0.2);
+                  "
+                >
+                  ✓ Differential privacy ε=1.0
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========== JSON VIEWS ========== -->
+        <div class="view" id="view-agents">
+          <div class="page-hdr">
+            <div class="page-title">agents.json</div>
+            <div class="page-sub">
+              7 agent role definitions · LLM configs · tool access · privacy
+              tiers
+            </div>
+          </div>
+          <div class="file-viewer">
+            <div class="file-hdr">
+              <div class="file-dots">
+                <span style="background: #ef4444"></span>
+                <span style="background: #f59e0b"></span>
+                <span style="background: #10b981"></span>
+              </div>
+              <div class="file-name">agents.json</div>
+              <span
+                class="file-badge"
+                style="background: rgba(59, 130, 246, 0.1); color: var(--blue)"
+                >7 agents</span
+              >
+            </div>
+            <div class="file-body">
+              <div
+                id="agents-json-content"
+                style="
+                  font-size: 11px;
+                  line-height: 1.8;
+                  font-family: 'JetBrains Mono', monospace;
+                  color: #94a3b8;
+                "
+              >
+                Loading...
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="view" id="view-wfjson">
+          <div class="page-hdr">
+            <div class="page-title">workflow.json</div>
+            <div class="page-sub">
+              4 phases · all node connections · LangGraph config · delivery
+              endpoints
+            </div>
+          </div>
+          <div class="file-viewer">
+            <div class="file-hdr">
+              <div class="file-dots">
+                <span style="background: #ef4444"></span>
+                <span style="background: #f59e0b"></span>
+                <span style="background: #10b981"></span>
+              </div>
+              <div class="file-name">workflow.json</div>
+              <span
+                class="file-badge"
+                style="
+                  background: rgba(245, 158, 11, 0.1);
+                  color: var(--yellow);
+                "
+                >4 phases</span
+              >
+            </div>
+            <div class="file-body">
+              <div
+                id="wf-json-content"
+                style="
+                  font-size: 11px;
+                  line-height: 1.8;
+                  font-family: 'JetBrains Mono', monospace;
+                  color: #94a3b8;
+                "
+              >
+                Loading...
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="view" id="view-params">
+          <div class="page-hdr">
+            <div class="page-title">params.json</div>
+            <div class="page-sub">
+              Runtime variables · thresholds · feature flags · environment
+              overrides
+            </div>
+          </div>
+
+          <div class="param-section">
+            <h3 style="color: var(--green)">⚙ Feature Flags</h3>
+            <table class="param-table">
+              <thead>
+                <tr>
+                  <th>Flag</th>
+                  <th>Value</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="param-key">federated_learning_enabled</td>
+                  <td class="flag-on">true</td>
+                  <td class="param-desc">On-device TF Lite FL model active</td>
+                </tr>
+                <tr>
+                  <td class="param-key">google_health_api_enabled</td>
+                  <td class="flag-on">true</td>
+                  <td class="param-desc">Google Fit scopes active</td>
+                </tr>
+                <tr>
+                  <td class="param-key">nfc_offline_mode_enabled</td>
+                  <td class="flag-on">true</td>
+                  <td class="param-desc">₹5K offline NFC card limit</td>
+                </tr>
+                <tr>
+                  <td class="param-key">ubi_auto_switch_enabled</td>
+                  <td class="flag-on">true</td>
+                  <td class="param-desc">Quarterly auto policy switch</td>
+                </tr>
+                <tr>
+                  <td class="param-key">multi_language_enabled</td>
+                  <td class="flag-on">true</td>
+                  <td class="param-desc">6 Indian languages supported</td>
+                </tr>
+                <tr>
+                  <td class="param-key">wearable_fraud_signals_enabled</td>
+                  <td class="flag-on">true</td>
+                  <td class="param-desc">Accelerometer + GPS fraud signals</td>
+                </tr>
+                <tr>
+                  <td class="param-key">differential_privacy_enabled</td>
+                  <td class="flag-on">true</td>
+                  <td class="param-desc">ε=1.0, δ=1e-5</td>
+                </tr>
+                <tr>
+                  <td class="param-key">human_handoff_enabled</td>
+                  <td class="flag-on">true</td>
+                  <td class="param-desc">LangGraph interrupt() node active</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="param-section">
+            <h3 style="color: var(--teal)">💳 Credit Thresholds</h3>
+            <table class="param-table">
+              <thead>
+                <tr>
+                  <th>Parameter</th>
+                  <th>Value</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="param-key">min_credit_line_inr</td>
+                  <td class="param-val">15,000</td>
+                  <td class="param-desc">Minimum emergency credit line</td>
+                </tr>
+                <tr>
+                  <td class="param-key">max_credit_line_inr</td>
+                  <td class="param-val">500,000</td>
+                  <td class="param-desc">Maximum credit ceiling</td>
+                </tr>
+                <tr>
+                  <td class="param-key">nfc_offline_limit_inr</td>
+                  <td class="param-val">5,000</td>
+                  <td class="param-desc">Secure Element offline spend limit</td>
+                </tr>
+                <tr>
+                  <td class="param-key">thin_file_cibil_threshold</td>
+                  <td class="param-val">650</td>
+                  <td class="param-desc">Below this, HRS weight = 60%</td>
+                </tr>
+                <tr>
+                  <td class="param-key">fraud_misuse_rate_pct</td>
+                  <td class="param-val">21%</td>
+                  <td class="param-desc">
+                    Annualised interest on fraud/misuse
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="param-section">
+            <h3 style="color: var(--yellow)">🛡 Fraud Detection Thresholds</h3>
+            <table class="param-table">
+              <thead>
+                <tr>
+                  <th>Parameter</th>
+                  <th>Value</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="param-key">auto_approve_below</td>
+                  <td class="param-val">0.30</td>
+                  <td class="param-desc">
+                    Fraud score below this → auto approve
+                  </td>
+                </tr>
+                <tr>
+                  <td class="param-key">human_review_range</td>
+                  <td class="param-val">0.30 – 0.70</td>
+                  <td class="param-desc">Ambiguous → underwriter review</td>
+                </tr>
+                <tr>
+                  <td class="param-key">auto_reject_above</td>
+                  <td class="param-val">0.70</td>
+                  <td class="param-desc">High fraud score → auto reject</td>
+                </tr>
+                <tr>
+                  <td class="param-key">target_fraud_reduction</td>
+                  <td class="param-val">70%</td>
+                  <td class="param-desc">Target reduction vs baseline</td>
+                </tr>
+                <tr>
+                  <td class="param-key">wearable_accelerometer_weight</td>
+                  <td class="param-val">0.25</td>
+                  <td class="param-desc">Highest signal weight</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="param-section">
+            <h3 style="color: var(--pink)">⏱ SLA Targets</h3>
+            <table class="param-table">
+              <thead>
+                <tr>
+                  <th>Parameter</th>
+                  <th>Value</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="param-key">auto_approval_target_hours</td>
+                  <td class="param-val">2</td>
+                  <td class="param-desc">Cashless claim auto-approval SLA</td>
+                </tr>
+                <tr>
+                  <td class="param-key">human_review_sla_hours</td>
+                  <td class="param-val">4</td>
+                  <td class="param-desc">Underwriter review SLA for claims</td>
+                </tr>
+                <tr>
+                  <td class="param-key">hospital_auth_target_ms</td>
+                  <td class="param-val">500</td>
+                  <td class="param-desc">gRPC hospital auth response time</td>
+                </tr>
+                <tr>
+                  <td class="param-key">general_escalation_sla_min</td>
+                  <td class="param-val">30</td>
+                  <td class="param-desc">Non-claim human handoff SLA</td>
+                </tr>
+                <tr>
+                  <td class="param-key">infra_sla_pct</td>
+                  <td class="param-val">99.99%</td>
+                  <td class="param-desc">EKS + Istio availability target</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="file-viewer" style="margin-top: 20px">
+            <div class="file-hdr">
+              <div class="file-dots">
+                <span style="background: #ef4444"></span>
+                <span style="background: #f59e0b"></span>
+                <span style="background: #10b981"></span>
+              </div>
+              <div class="file-name">params.json (full)</div>
+              <span
+                class="file-badge"
+                style="
+                  background: rgba(139, 92, 246, 0.1);
+                  color: var(--purple);
+                "
+                >Runtime Config</span
+              >
+            </div>
+            <div class="file-body">
+              <div
+                id="params-json-content"
+                style="
+                  font-size: 11px;
+                  line-height: 1.8;
+                  font-family: 'JetBrains Mono', monospace;
+                  color: #94a3b8;
+                "
+              >
+                Loading...
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- /main -->
+    </div>
+    <!-- /layout -->
+
+    <script>
+      // ========== Node data ==========
+      const NODE_DATA = {
+        input: {
+          title: 'Input Gateway',
+          agent: 'Orchestrator',
+          desc: 'Entry point for all user interactions. Supports 4 channels: app (REST/WebSocket), WhatsApp Business API, NFC card tap (bystander admission), and wearable alert (auto-triggered). Each channel delivers a normalised message object to the pipeline.',
+          cards: [
+            ['Supported Channels', 'app · whatsapp · nfc_tap · wearable_alert'],
+            [
+              'Output Schema',
+              '{ message, channel, user_id, timestamp, raw_payload }',
+            ],
+            [
+              'NFC Tap Flow',
+              'Bystander taps card at hospital → Secure Element releases ABHA ID + credit limit → no app, no login, no internet required',
+            ],
+            [
+              'LangGraph Config',
+              'Node type: entry. Thread ID: sc_{channel}_{user_id}_{ts}',
+            ],
+          ],
+        },
+        memory_load: {
+          title: 'Memory / Context Load',
+          agent: 'Orchestrator',
+          desc: 'Loads all relevant user context from Redis before processing begins. This ensures every LLM call has full situational awareness — prior turns, health score history, active insurance policy, credit state, and ABHA summary.',
+          cards: [
+            [
+              'Memory Sources',
+              'Redis (conversation history, 72hr TTL)\nABHA store (health summary)\nCredit store (current limit)\nInsurTech store (active policy, claim history)',
+            ],
+            [
+              'Keys Read',
+              'hrs_history_30d · hrs_current · credit_limit_updated · active_policy · claim_history_12m · conversation_history · abha_summary · user_channel_pref',
+            ],
+            [
+              'LangGraph Config',
+              'Node type: memory_read. Async parallel reads. Timeout: 2s.',
+            ],
+            [
+              'On Cold Start',
+              'New user: initialise empty context. Prompt for ABHA linking and Google Health API consent.',
+            ],
+          ],
+        },
+        llm_context_injection: {
+          title: 'LLM — Context Injection',
+          agent: 'Orchestrator',
+          desc: "First LLM call in the pipeline. Injects the full loaded context into the system prompt and formats the user's raw message into a structured intent query. This structured output feeds the classifier router.",
+          cards: [
+            [
+              'Model',
+              'claude-sonnet-4-20250514 · temperature: 0.2 · max_tokens: 400',
+            ],
+            [
+              'System Prompt',
+              "You are SmartCover's routing orchestrator. Classify intent into domains: health_query, credit_query, insurance_query, claim_query, faq. Output ONLY JSON. Never fabricate health or financial data.",
+            ],
+            [
+              'Output Schema',
+              '{ primary_domain, secondary_domains[], urgency, channel, language, structured_query }',
+            ],
+            [
+              'LangGraph Config',
+              'Node type: llm. Streaming: false. Retry on timeout: 1x.',
+            ],
+          ],
+        },
+        classifier_router: {
+          title: 'Classifier / Router',
+          agent: 'Orchestrator',
+          desc: 'Conditional edge dispatcher. Routes to one or more agent branches based on classified intent. Parallel dispatch enabled — a single user query can trigger HealthTech + FinTech + InsurTech simultaneously.',
+          cards: [
+            [
+              'Routing Map',
+              'health_query → HealthTech\ncredit_query → FinTech\ninsurance_query → InsurTech\nclaim_query → Claim\nfaq → FAQ',
+            ],
+            [
+              'Parallel Dispatch',
+              'Multi-domain queries trigger parallel branches. LangGraph fan-out via conditional_edges.',
+            ],
+            [
+              'LangGraph Config',
+              'Node type: conditional_edge. parallel_allowed: true. Max parallel branches: 5.',
+            ],
+            [
+              'Urgency Escalation',
+              'urgency=critical → Claim agent activated regardless of domain. NFC tap always triggers Claim + FinTech.',
+            ],
+          ],
+        },
+        health_privacy_gate: {
+          title: '🔒 Privacy Gate (DPDP 2023)',
+          agent: 'HealthTech Agent',
+          desc: 'Mandatory privacy checkpoint before any health data processing. Verifies user consent scope, blocks raw biometric data from leaving the device, and validates DPDP Act 2023 + ABDM privacy policy compliance. Pipeline halts if any check fails.',
+          cards: [
+            [
+              'Consent Checks',
+              '1. user_consent_health_data = true\n2. consent_scope includes requested metrics\n3. consent_granted_at within 365 days',
+            ],
+            [
+              'Privacy Enforcement',
+              'Verifies: no_raw_biometrics_in_payload\nEnforces: on_device_only = true for FL model\nBlocks: any raw time-series data',
+            ],
+            [
+              'Compliance',
+              'DPDP Act 2023 · ABDM Privacy Policy · IT Act 2000\nDifferential Privacy: ε=1.0, δ=1e-5',
+            ],
+            [
+              'On Fail',
+              'privacy_breach_halt → User prompted to re-consent. No health data used in downstream decisions. HRS defaults to neutral band (Fair).',
+            ],
+          ],
+        },
+        google_health_api_call: {
+          title: 'Google Fit / Health API',
+          agent: 'HealthTech Agent',
+          desc: 'Fetches aggregated health metrics ON-DEVICE via Google Health API. Never transmits raw time-series data. Returns a local bundle of 7 aggregated metrics that feeds the TF Lite FL model for HRS computation.',
+          cards: [
+            [
+              'API Scopes',
+              'fitness.activity.read\nfitness.heart_rate.read\nfitness.sleep.read\nfitness.oxygen_saturation.read\nfitness.body.read',
+            ],
+            [
+              'Metrics Fetched',
+              'step_count_daily_7d_avg\nheart_rate_resting_avg_30d\nsleep_duration_hours_avg\nactive_minutes_daily_avg\nblood_oxygen_spo2_avg\nstress_index_band\nbmi_computed',
+            ],
+            [
+              'On-Device Only',
+              'All API calls made from device. Aggregated values only. No raw series. Output: local_health_metrics_bundle (stays on device).',
+            ],
+            [
+              'Aggregation Window',
+              '7-day rolling for activity. 30-day rolling for heart rate. Single last-reading for SpO₂.',
+            ],
+          ],
+        },
+        fl_model_inference: {
+          title: 'TF Lite FL — HRS Inference',
+          agent: 'HealthTech Agent',
+          desc: 'TensorFlow Lite federated model runs entirely on-device. Takes the local health metrics bundle and produces an HRS score (0–1000). Only the HRS score and band leave the device — never the input metrics.',
+          cards: [
+            [
+              'Model',
+              'TensorFlow Lite 2.13.0\nFederated Learning — weekly global round\nMin participants per round: 100',
+            ],
+            [
+              'HRS Weights',
+              'Steps 20% · Heart Rate 20% · Sleep 18% · Active Min 17% · SpO₂ 12% · Stress 8% · BMI 5%',
+            ],
+            [
+              'Output',
+              'hrs_score: 0–1000\nhrs_band: Excellent|Good|Fair|Moderate|At Risk\nhrs_delta_30d: integer\npremium_delta: float\ncredit_boost_inr: integer',
+            ],
+            [
+              'What Leaves Device',
+              'ONLY: hrs_score + hrs_band + hrs_delta. Raw metrics bundle is destroyed after inference.',
+            ],
+          ],
+        },
+        abha_fhir_lookup: {
+          title: 'ABHA / ABDM FHIR Lookup',
+          agent: 'HealthTech Agent',
+          desc: "Fetches minimal health record summary from ABDM using the user's ABHA ID. Used only for claim context (known conditions, allergies, prior hospitalizations). Minimal fields principle — only what's needed for the current interaction.",
+          cards: [
+            [
+              'FHIR Resources',
+              'Patient · Condition · AllergyIntolerance · Immunization',
+            ],
+            [
+              'Data Minimisation',
+              'Only summary-level data. No full medical history. No lab results. No imaging.',
+            ],
+            [
+              'Auth',
+              'ABHA token (OAuth2). User must have linked ABHA account. Token refreshed silently.',
+            ],
+            [
+              'Output',
+              'abha_summary: { conditions[], allergies[], last_hospitalization_date, abha_id }',
+            ],
+          ],
+        },
+        cibil_api_call: {
+          title: 'CIBIL API',
+          agent: 'FinTech Agent',
+          desc: 'Fetches user credit score from CIBIL via RBI NBFC-compliant API. Detects thin file cases (score below 650 or insufficient credit history) to trigger HRS-weighted dual scoring.',
+          cards: [
+            [
+              'Output',
+              'cibil_score: integer\nthin_file: boolean\ncredit_history_months: integer',
+            ],
+            [
+              'Thin File Detection',
+              'cibil_score < 650 OR credit_history_months < 12 → thin_file = true',
+            ],
+            [
+              'RBI Compliance',
+              'NBFC partner API. Bureau consent logged. Inquiry logged in credit bureau.',
+            ],
+            [
+              'LangGraph Config',
+              'Tool call. Timeout: 3s. Retry: 1x on timeout.',
+            ],
+          ],
+        },
+        credit_thin_file_condition: {
+          title: 'Thin File? → HRS Weight Boost',
+          agent: 'FinTech Agent',
+          desc: 'Critical FinTech innovation: for users with thin or low CIBIL files (common in semi-urban India), the Health Risk Score is weighted more heavily in credit decisions, enabling financial inclusion.',
+          cards: [
+            ['Condition', 'thin_file == true OR cibil_score < 650'],
+            ['Normal Weights', 'CIBIL: 60% · HRS: 40%'],
+            ['Thin File Weights', 'CIBIL: 40% · HRS: 60%'],
+            [
+              'Impact',
+              'Users with no credit history but Excellent HRS (850+) can qualify for up to ₹3.75L credit line — enabled by health as a credit signal.',
+            ],
+          ],
+        },
+        credit_engine: {
+          title: 'Credit Engine (LightGBM Stacking)',
+          agent: 'FinTech Agent',
+          desc: 'LightGBM stacking model computes the final credit limit using dual signals. Interpretable model — decision rationale is always generated for user transparency and RBI compliance.',
+          cards: [
+            [
+              'Model',
+              'LightGBM Stacking\nInputs: cibil_score, hrs_band, income_declared, existing_emis, weights',
+            ],
+            [
+              'Credit Range',
+              'Min: ₹15,000 · Max: ₹5,00,000\nNFC offline limit: ₹5,000 (always)',
+            ],
+            [
+              'Output',
+              'credit_limit_inr: integer\ncredit_approved: boolean\ndecision_rationale: string (for user transparency)',
+            ],
+            [
+              'HRS Credit Boost',
+              'Excellent: +₹50K · Good: +₹25K · Fair: ₹0 · Moderate: -₹10K · At Risk: -₹25K',
+            ],
+          ],
+        },
+        bert_policy_match: {
+          title: 'BERT Policy Matcher',
+          agent: 'InsurTech Agent',
+          desc: 'Semantic policy matching using BERT-class embeddings over a FAISS index of all IRDAI-compliant policy documents. Matches user health profile band and query text to the most suitable policy clauses.',
+          cards: [
+            [
+              'Model',
+              'bert-base-multilingual-cased\nFAISS index · top-k: 3 · min similarity: 0.72',
+            ],
+            [
+              'Inputs',
+              'user_health_profile_band · age · declared_conditions · query_text',
+            ],
+            [
+              'Output',
+              'matched_policies: list[top_3]\nsimilarity_scores: list[float]\nbest_policy_id: string',
+            ],
+            [
+              'Auto-Switch',
+              'Quarterly auto-switch to highest-scoring policy if similarity delta > 0.05. User notified 7 days before switch.',
+            ],
+          ],
+        },
+        ubi_calculator: {
+          title: 'UBI Premium Calculator',
+          agent: 'InsurTech Agent',
+          desc: 'Usage-Based Insurance premium engine. Recalculates monthly premium based on HRS band, HRS delta over 30 days, and claim history. Creates a behavioral feedback loop: healthier lifestyle = lower premium AND higher credit limit.',
+          cards: [
+            [
+              'Delta Range',
+              'Premium delta: -15% to +15% monthly\nRecalculation: monthly\nAuto policy switch: quarterly',
+            ],
+            [
+              'Inputs',
+              'hrs_band · hrs_delta_30d · claim_history_12m · base_premium',
+            ],
+            [
+              'Output',
+              'ubi_premium_delta_pct: float\nnew_monthly_premium: integer\nauto_switch_recommended: boolean\nrecommended_policy_id: string',
+            ],
+            [
+              'Behavioral Loop',
+              'HRS improves → premium drops + credit ceiling rises. First behavioral feedback loop of this kind in India.',
+            ],
+          ],
+        },
+        fraud_detector: {
+          title: 'Multi-Signal Fraud Detector',
+          agent: 'InsurTech Agent',
+          desc: 'Industry-first multi-signal fraud detection fusing wearable data, GPS, FHIR records, DigiLocker documents, and claim frequency patterns. Target: 70% reduction in fraudulent claims.',
+          cards: [
+            [
+              '5 Signals',
+              '1. Wearable accelerometer (0.25 weight)\n2. GPS at claim location (0.20)\n3. FHIR record consistency (0.25)\n4. DigiLocker doc authenticity (0.20)\n5. Claim frequency anomaly (0.10)',
+            ],
+            [
+              'Score Routing',
+              '< 0.30 → auto approve\n0.30–0.70 → human review\n> 0.70 → auto reject',
+            ],
+            [
+              'Output',
+              'fraud_score: float[0,1]\nfraud_signals_fired: list[string]\nrecommendation: auto_approve|human_review|auto_reject',
+            ],
+            [
+              'Target',
+              '70% reduction in fraudulent claims vs industry baseline.',
+            ],
+          ],
+        },
+        insurtech_llm_explain: {
+          title: 'LLM — UBI Premium Explanation',
+          agent: 'InsurTech Agent',
+          desc: "Generates a user-facing explanation of the UBI premium change in simple language, tailored to the user's detected language. Always includes required IRDAI disclaimers.",
+          cards: [
+            [
+              'Model',
+              'claude-sonnet-4-20250514 · temperature: 0.15 · max_tokens: 700',
+            ],
+            [
+              'Prompt Template',
+              "Explain the UBI premium change of {ubi_premium_delta_pct}% based on HRS band '{hrs_band}' in simple language for the user. Include IRDAI disclaimers.",
+            ],
+            [
+              'IRDAI Requirements',
+              'No coverage guarantees without policy confirmation. Correct complaint escalation language. Ombudsman limit: ₹30L.',
+            ],
+            [
+              'Languages',
+              "Automatically matches user's detected language: en · hi · ta · te · bn · mr",
+            ],
+          ],
+        },
+        fhir_claim_processor: {
+          title: 'FHIR Claim Processor',
+          agent: 'Claim Agent',
+          desc: 'Creates an HL7 FHIR R4 Claim resource and generates a unique claim reference ID. Validates all required fields against IRDAI and hospital requirements before proceeding.',
+          cards: [
+            [
+              'Standard',
+              'HL7 FHIR R4\nResources: Claim · ClaimResponse · Coverage · Patient · Encounter',
+            ],
+            [
+              'Inputs',
+              'abha_id · hospital_id · admission_diagnosis_code (ICD-10) · estimated_amount_inr',
+            ],
+            [
+              'Output',
+              'claim_ref_id: string (always generated)\nfhir_claim_object: FHIR R4 Claim resource',
+            ],
+            [
+              'Validation',
+              'All required FHIR fields validated. Missing fields → user prompted before proceeding.',
+            ],
+          ],
+        },
+        hospital_auth_api: {
+          title: 'Hospital Auth API (<500ms)',
+          agent: 'Claim Agent',
+          desc: "Calls the hospital's FHIR-compliant auth endpoint via gRPC to confirm: payment guarantee, bed allocation, and cashless admission approval. SLA: 500ms. Enables zero upfront deposit at admission.",
+          cards: [
+            [
+              'Protocol',
+              'gRPC · HL7 FHIR R4 standard · any FHIR-compliant hospital · no custom integrations',
+            ],
+            [
+              'SLA',
+              '< 500ms · High throughput · EKS auto-scale on claim spikes',
+            ],
+            [
+              'Output',
+              'auth_granted: boolean\npayment_guarantee_inr: integer\nbed_allocation_confirmed: boolean',
+            ],
+            [
+              'NFC Flow',
+              'Bystander taps card → NFC SE releases ABHA ID + policy → hospital auth fires in <500ms → bed allocated → ₹0 upfront',
+            ],
+          ],
+        },
+        claim_fraud_check: {
+          title: 'Fraud Score Gate',
+          agent: 'Claim Agent',
+          desc: "Conditional routing node that dispatches the claim to auto-approve, human review, or auto-reject based on the fraud score from the InsurTech agent's multi-signal fraud detector.",
+          cards: [
+            [
+              'Routing Logic',
+              'fraud_score < 0.30 → auto_approve (2hr SLA)\n0.30–0.70 → human_handoff (4hr SLA)\n> 0.70 → auto_reject',
+            ],
+            [
+              'Override',
+              'claim_amount > ₹30L always routes to human_handoff regardless of fraud score (IRDAI requirement).',
+            ],
+            [
+              'LangGraph Config',
+              'Node type: condition. Evaluates fraud_score from InsurTech agent output.',
+            ],
+            [
+              'Audit',
+              'All routing decisions logged to LangSmith + Kafka with full fraud signal breakdown.',
+            ],
+          ],
+        },
+        human_handoff: {
+          title: 'Human Handoff (Underwriter)',
+          agent: 'human_handoff_agent',
+          desc: 'LangGraph interrupt() node. Pauses graph execution and routes to underwriter review queue. Graph state preserved in Redis. Resumes via POST /lg/resume/{thread_id} after underwriter decision.',
+          cards: [
+            [
+              'Trigger Conditions',
+              'fraud_score in (0.30, 0.70)\nOR claim_amount > ₹30L\nOR policy_ambiguity = true\nOR user_explicit_escalation = true',
+            ],
+            [
+              'SLA',
+              'Claims: 4hr · General escalation: 30min\nSlack + email notification to on-call underwriter',
+            ],
+            [
+              'Resume API',
+              'POST /lg/resume/{thread_id}\nBody: { decision.approved, decision.reason }\nState preserved in Redis during wait',
+            ],
+            [
+              'Dashboard',
+              'Underwriter sees: fraud signal breakdown · FHIR summary · policy clause analysis · recommended action',
+            ],
+          ],
+        },
+        faq_retriever: {
+          title: 'Semantic FAQ Retrieval',
+          agent: 'FAQ Agent',
+          desc: 'Semantic retrieval over the SmartCover FAQ database and all IRDAI policy documentation using FAISS + multilingual-e5-small embeddings. Returns top-3 most relevant passages by cosine similarity.',
+          cards: [
+            [
+              'Index',
+              'shared_faq_policy_faiss\nEmbedding: multilingual-e5-small\nTop-k: 3 · Min similarity: 0.65',
+            ],
+            [
+              'Languages',
+              'Multilingual: en · hi · ta · te · bn · mr\nCross-lingual retrieval supported',
+            ],
+            ['Reindex', 'Daily re-index on FAQ changes at 02:00 IST'],
+            [
+              'Output',
+              'retrieved_passages: list[top_3]\nsource_ids: list[string]\nFor unmatched queries: connect to human support — never fabricate',
+            ],
+          ],
+        },
+        faq_loop: {
+          title: 'FAQ Loop (max 3 iterations)',
+          agent: 'FAQ Agent',
+          desc: 'LangGraph loop construct for compound user questions covering multiple topics. Iterates over each retrieved passage, generates a focused response chunk, accumulates into a multi-part answer.',
+          cards: [
+            [
+              'Loop Config',
+              'max_iterations: 3\nExit: all passages processed OR confidence > 0.9\nAccumulator: list[AnswerChunk]',
+            ],
+            [
+              'Per-Iteration Prompt',
+              "For passage {i} of {n}: {passage}. Write one concise paragraph answering the relevant part of the user's question.",
+            ],
+            [
+              'LangGraph Config',
+              'Node type: loop with accumulator. Sequential (for coherence).',
+            ],
+            [
+              'Output',
+              'answer_chunks: list[AnswerChunk]\nsource_attributions: list[string]',
+            ],
+          ],
+        },
+        phase_3_merge: {
+          title: 'Merge / Join',
+          agent: 'Orchestrator',
+          desc: 'Aggregates all active agent branch outputs into a unified context object. Applies priority ordering for conflicts. Handles parallel branches, sequential loop results, and human handoff decisions.',
+          cards: [
+            [
+              'Priority Order',
+              'claim > insurtech > fintech > healthtech > faq\nConflict: higher-confidence result wins',
+            ],
+            [
+              'Output Schema',
+              'List[ResponsePart{ agent, content, confidence, source }]',
+            ],
+            [
+              'Timeout',
+              '5s · On timeout: use partial results with staleness_flag = true',
+            ],
+            [
+              'LangGraph Config',
+              'Node type: merge(). Waits for all active branches. Normalises to ResponsePart schema.',
+            ],
+          ],
+        },
+        llm_synthesis: {
+          title: 'LLM — Final Synthesis',
+          agent: 'Orchestrator',
+          desc: 'Primary response generation LLM call. Takes merged multi-agent context and produces the final user-facing response. Channel-aware, IRDAI-compliant, and brand-voice enforced.',
+          cards: [
+            [
+              'Model',
+              'claude-sonnet-4-20250514\nTemperature: 0.4\nmax_tokens: 800 (app) / 400 (WhatsApp) / 200 (NFC)',
+            ],
+            [
+              'Prompt Rules',
+              "1. Never promise coverage not confirmed by InsurTech agent\n2. Always state claim_ref_id for claim queries\n3. Simple language for user's detected language\n4. Tone: warm, empowering, factual",
+            ],
+            [
+              'Channel Adaptation',
+              'app: detailed with CTA\nWhatsApp: conversational ≤1600 chars\nNFC: 2-line ultra-minimal',
+            ],
+            [
+              'IRDAI Compliance',
+              'No coverage guarantees without policy confirmation. Required disclaimers auto-appended.',
+            ],
+          ],
+        },
+        evaluator_guardrail: {
+          title: 'Evaluator / Guardrail',
+          agent: 'Orchestrator',
+          desc: 'Three-part automated evaluation every response must pass. Checks run in parallel. Overall pass threshold: 0.85. On fail → retry with failure reasons injected.',
+          cards: [
+            [
+              'Check 1: Factual',
+              'Response facts ⊆ agent tool outputs\nThreshold: 0.85\nCross-references against all agent outputs',
+            ],
+            [
+              'Check 2: IRDAI',
+              'Required disclaimers present\nNo coverage guarantees without confirmation\nThreshold: 1.0 (zero tolerance)',
+            ],
+            [
+              'Check 3: Toxicity',
+              'Anthropic safety classifier\nThreshold: 0.95',
+            ],
+            [
+              'Routing',
+              'All pass (score > 0.85) → output_formatter\nAny fail → retry_fallback with failure reasons injected',
+            ],
+          ],
+        },
+        retry_fallback: {
+          title: 'Retry / Fallback',
+          agent: 'Orchestrator',
+          desc: 'Handles failed evaluator checks with max 3 retries and exponential backoff. If all 3 retries fail, activates the pre-approved safe fallback response — never a hallucinated answer.',
+          cards: [
+            [
+              'Retry Config',
+              'max_retries: 3\nBackoff: 1s, 2s, 4s (exponential)\nFailure reasons injected into retry prompt',
+            ],
+            [
+              'Retry Prompt',
+              'Your previous response failed evaluation. Failures: {failures}. Retry with these constraints: {constraints}. If unable, respond with ESCALATE.',
+            ],
+            [
+              'Safe Fallback',
+              "Pre-written, pre-approved: 'I wasn't able to process your request automatically. Your reference is {ref_id}. Our team will contact you within 2 hours. For emergencies: tap your SmartCover card.'",
+            ],
+            [
+              'On ESCALATE',
+              'human_handoff activated. User routed to underwriter queue.',
+            ],
+          ],
+        },
+        output_formatter: {
+          title: 'Output Formatter',
+          agent: 'Orchestrator',
+          desc: 'Transforms LLM-generated response into exact format required by delivery channel. Deterministic — no LLM. Pure transformation. Injects tracking metadata.',
+          cards: [
+            [
+              'App Format',
+              'JSON: { title, body, cta, claim_ref }\nWith response_id + agent_trace_id',
+            ],
+            [
+              'WhatsApp Format',
+              'Plain text · max 1600 chars · emoji permitted',
+            ],
+            [
+              'NFC / Hospital',
+              '2 lines · max 40 chars each · ultra-minimal\nHL7 ClaimResponse R4 for FHIR endpoint',
+            ],
+            [
+              'LangGraph Config',
+              'Node type: OutputFormatter. No LLM. Deterministic transformation.',
+            ],
+          ],
+        },
+        memory_save: {
+          title: 'Memory Save (async)',
+          agent: 'Orchestrator',
+          desc: 'Asynchronous persistence of the completed interaction across all relevant stores. Fire-and-forget — does not block response delivery.',
+          cards: [
+            [
+              'Redis',
+              'Conversation turn saved\nTTL: 72 hours · Max 10 turns per thread',
+            ],
+            [
+              'ABHA FHIR',
+              'Encounter record pushed if claim processed\nHL7 FHIR Encounter R4 to ABDM timeline',
+            ],
+            [
+              'Credit / UBI',
+              'HRS delta signal → credit limit recalculation job\nUBI recalc flag if hrs_delta > 30',
+            ],
+            [
+              'LangGraph Config',
+              'Node type: StateSaver. Async writes (fire-and-forget). Non-blocking.',
+            ],
+          ],
+        },
+        custom_side_effects: {
+          title: 'Kafka Events + Side Effects',
+          agent: 'Custom Code',
+          desc: 'Post-processing side effects via Kafka MSK. Emits domain events, triggers async jobs, updates NFC card Secure Element if credit limit changed, and pushes LangSmith trace.',
+          cards: [
+            [
+              'Kafka Topics',
+              'claim.completed → claim-events\ncredit.checked → credit-events\npremium.recalculated → ubi-events\nhealth.queried → health-events',
+            ],
+            [
+              'Side Effects',
+              'NFC card SE update if credit_limit changed\nUBI recalculation job if hrs_delta > 30\nHospital payment initiation if claim approved',
+            ],
+            [
+              'LangGraph Config',
+              'Node type: custom. Pure Python/Go. No LLM. Async execution.',
+            ],
+            [
+              'Event Pipeline',
+              'Apache Kafka (MSK). At-least-once delivery. Async claim flow.',
+            ],
+          ],
+        },
+        output_delivery: {
+          title: 'Output Delivery (END)',
+          agent: 'Orchestrator',
+          desc: 'Terminal node. Delivers formatted response to the correct channel endpoint. Marks LangGraph thread as COMPLETED in Redis.',
+          cards: [
+            [
+              'Delivery Endpoints',
+              'App: FCM/APNs push + in-app API\nWhatsApp: Meta Business API\nNFC/hospital: FHIR callback webhook\nInsurer: REST webhook subscription',
+            ],
+            [
+              'Metadata',
+              'response_id + agent_trace_id included in all payloads for end-to-end tracking',
+            ],
+            [
+              'LangGraph Config',
+              'Node type: END. Marks thread COMPLETED. Triggers async audit write.',
+            ],
+            [
+              'Infrastructure',
+              'EKS Kubernetes + Istio mTLS · 99.99% SLA · Auto-scale on claim spikes',
+            ],
+          ],
+        },
+        audit_log: {
+          title: 'Audit Log (LangSmith)',
+          agent: 'System',
+          desc: 'Automatically written LangSmith distributed trace at end of every thread. IRDAI requires 7-year record retention for all claim-related interactions.',
+          cards: [
+            [
+              'Audit Contents',
+              'Full node execution timeline · All LLM I/O · Tool call results · Evaluator scores · Memory operations · Retry history · Delivery confirmation',
+            ],
+            [
+              'Retention',
+              'LangSmith: 90 days (live query)\nKafka S3 archive: 7 years (IRDAI requirement)',
+            ],
+            [
+              'Compliance',
+              'Full replay capability for regulatory disputes\nHuman decision records separately immutable\nIRDAI-auditor read IAM role on S3 bucket',
+            ],
+            [
+              'Access',
+              'Internal: LangSmith dashboard\nRegulatory: S3 audit bucket with IRDAI-auditor read IAM',
+            ],
+          ],
+        },
+      };
+
+      // ========== View switching ==========
+      function setView(v) {
+        document
+          .querySelectorAll('.view')
+          .forEach((el) => el.classList.remove('active'));
+        document
+          .querySelectorAll('.tab')
+          .forEach((el) => el.classList.remove('active'));
+        document
+          .querySelectorAll('.sb-item')
+          .forEach((el) => el.classList.remove('active'));
+        document.getElementById('view-' + v).classList.add('active');
+        const t = document.getElementById('tab-' + v);
+        if (t) t.classList.add('active');
+        const s = document.getElementById('sb-' + v);
+        if (s) s.classList.add('active');
+      }
+
+      // ========== Phase toggle ==========
+      function togglePhase(id) {
+        const body = document.getElementById('pb-' + id);
+        const toggle = document.getElementById('pt-' + id);
+        const isOpen = body.classList.contains('open');
+        body.classList.toggle('open', !isOpen);
+        toggle.classList.toggle('open', !isOpen);
+      }
+
+      // ========== Node selection ==========
+      let selectedNode = null;
+      function selectNode(id) {
+        if (selectedNode) {
+          const prev = document.getElementById('wn-' + selectedNode);
+          if (prev) prev.classList.remove('selected');
+        }
+        const el = document.getElementById('wn-' + id);
+        if (el) el.classList.add('selected');
+        selectedNode = id;
+        const d = NODE_DATA[id];
+        if (!d) {
+          document.getElementById('detail-panel').style.display = 'none';
+          return;
+        }
+        document.getElementById('dp-title').textContent = d.title;
+        document.getElementById('dp-agent').textContent = 'Agent: ' + d.agent;
+        document.getElementById('dp-desc').textContent = d.desc;
+        const grid = document.getElementById('dp-grid');
+        grid.innerHTML = d.cards
+          .map(
+            ([k, v]) =>
+              `<div class="dp-card"><div class="dp-card-label">${k}</div><div class="dp-card-val" style="white-space:pre-wrap">${v}</div></div>`,
+          )
+          .join('');
+        document.getElementById('detail-panel').style.display = 'block';
+        setTimeout(
+          () =>
+            document
+              .getElementById('detail-panel')
+              .scrollIntoView({ behavior: 'smooth', block: 'nearest' }),
+          80,
+        );
+      }
+
+      // ========== JSON syntax highlight ==========
+      function syntaxHighlight(json) {
+        const str =
+          typeof json === 'string' ? json : JSON.stringify(json, null, 2);
+        return str
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(
+            /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+            function (match) {
+              let cls = 'j-num';
+              if (/^"/.test(match)) {
+                if (/:$/.test(match)) {
+                  cls = 'j-key';
+                } else {
+                  cls = 'j-str';
+                }
+              } else if (/true|false/.test(match)) {
+                cls = 'j-bool';
+              } else if (/null/.test(match)) {
+                cls = 'j-null';
+              }
+              return `<span class="${cls}">${match}</span>`;
+            },
+          );
+      }
+
+      // Inline JSON data for the viewers
+      const AGENTS_JSON = {
+        schema_version: '1.0.0',
+        platform: 'SmartCover',
+        description:
+          'Agent role definitions, LLM configs, tool access, and privacy boundaries',
+        agents: {
+          orchestrator: {
+            id: 'orchestrator',
+            display_name: 'SmartCover Orchestrator',
+            role: 'Intent classification, multi-agent routing, merge coordination',
+            model: 'claude-sonnet-4-20250514',
+            temperature: 0.2,
+            max_tokens: 400,
+            privacy_tier: 'tier_1_minimal',
+            tools_allowed: ['intent_classifier', 'language_detector'],
+            memory_read: ['conversation_history', 'user_channel_pref'],
+            memory_write: ['intent_log'],
+          },
+          healthtech_agent: {
+            id: 'healthtech_agent',
+            display_name: 'HealthTech Agent',
+            role: 'Health Risk Score computation, wearable data processing, ABHA record lookup',
+            model: 'claude-sonnet-4-20250514',
+            temperature: 0.1,
+            max_tokens: 600,
+            privacy_tier: 'tier_3_sensitive',
+            federated_learning: {
+              enabled: true,
+              model: 'TensorFlow Lite (on-device FL)',
+              data_residency: 'device_only',
+              output: 'HRS_score_0_to_1000',
+              raw_data_leaves_device: false,
+              compliance: ['DPDP_Act_2023', 'ABDM_privacy_policy'],
+            },
+            hrs_weights: {
+              step_count: 0.2,
+              heart_rate_resting: 0.2,
+              sleep_duration: 0.18,
+              active_minutes: 0.17,
+              blood_oxygen_spo2: 0.12,
+              stress_index: 0.08,
+              bmi: 0.05,
+            },
+            never_transmit: [
+              'raw_heart_rate_series',
+              'raw_gps_coordinates',
+              'sleep_stage_breakdown',
+              'blood_glucose_readings',
+              'menstrual_cycle_data',
+              'mental_health_indicators',
+            ],
+          },
+          fintech_agent: {
+            id: 'fintech_agent',
+            display_name: 'FinTech Agent',
+            role: 'Credit scoring, NFC card management, EMI structuring',
+            model: 'claude-sonnet-4-20250514',
+            temperature: 0.1,
+            max_tokens: 500,
+            privacy_tier: 'tier_2_financial',
+            credit_engine: {
+              model: 'LightGBM_stacking',
+              weight_normal: { cibil: 0.6, hrs: 0.4 },
+              weight_thin_file: { cibil: 0.4, hrs: 0.6 },
+              thin_file_threshold: 650,
+              min_limit: 15000,
+              max_limit: 500000,
+            },
+          },
+          insurtech_agent: {
+            id: 'insurtech_agent',
+            display_name: 'InsurTech Agent',
+            role: 'Policy matching, UBI premium calculation, fraud detection',
+            model: 'claude-sonnet-4-20250514',
+            temperature: 0.15,
+            max_tokens: 700,
+            privacy_tier: 'tier_2_financial',
+            ubi_engine: {
+              base_premium_delta_range: [-0.15, 0.15],
+              recalculation_frequency: 'monthly',
+              auto_switch_frequency: 'quarterly',
+            },
+            fraud_detection: {
+              auto_approve_below: 0.3,
+              human_review_range: [0.3, 0.7],
+              auto_reject_above: 0.7,
+              target_reduction: 0.7,
+            },
+          },
+          claim_agent: {
+            id: 'claim_agent',
+            display_name: 'Claim Agent',
+            role: 'End-to-end cashless claim processing, hospital auth, TPA coordination',
+            model: 'claude-sonnet-4-20250514',
+            temperature: 0.1,
+            max_tokens: 600,
+            claim_sla: {
+              auto_approval_target_hours: 2,
+              hospital_auth_target_ms: 500,
+              human_review_sla_hours: 4,
+            },
+          },
+          faq_agent: {
+            id: 'faq_agent',
+            display_name: 'FAQ & Knowledge Agent',
+            role: 'Semantic retrieval over SmartCover docs and IRDAI policy documentation',
+            model: 'claude-sonnet-4-20250514',
+            temperature: 0.3,
+            max_tokens: 500,
+            retrieval: {
+              index: 'shared_faq_policy_faiss',
+              embedding_model: 'multilingual-e5-small',
+              top_k: 3,
+              min_similarity: 0.65,
+              languages: ['en', 'hi', 'ta', 'te', 'bn', 'mr'],
+            },
+          },
+          human_handoff_agent: {
+            id: 'human_handoff_agent',
+            display_name: 'Human Handoff (Underwriter)',
+            model: null,
+            langgraph_node_type: 'interrupt',
+            trigger_conditions: {
+              fraud_score_range: [0.3, 0.7],
+              claim_amount_exceeds_inr: 3000000,
+              policy_ambiguity: true,
+            },
+            sla: { claim_review_hours: 4, general_escalation_minutes: 30 },
+          },
+        },
+      };
+
+      const PARAMS_JSON = {
+        schema_version: '1.0.0',
+        platform: 'SmartCover',
+        environment: 'production',
+        health_scoring: {
+          google_fit_api: {
+            scopes_required: [
+              'fitness.activity.read',
+              'fitness.heart_rate.read',
+              'fitness.sleep.read',
+              'fitness.oxygen_saturation.read',
+              'fitness.body.read',
+            ],
+            consent_required: true,
+            consent_granularity: 'per_metric',
+            on_device_only: true,
+          },
+          fl_model: {
+            framework: 'TensorFlow Lite',
+            version: '2.13.0',
+            model_update_frequency: 'weekly_federated_round',
+            differential_privacy: { enabled: true, epsilon: 1.0, delta: 1e-5 },
+          },
+          hrs_weights: {
+            step_count: 0.2,
+            heart_rate_resting: 0.2,
+            sleep_duration: 0.18,
+            active_minutes: 0.17,
+            blood_oxygen_spo2: 0.12,
+            stress_index: 0.08,
+            bmi: 0.05,
+          },
+          privacy_rules: {
+            raw_data_leaves_device: false,
+            compliance: ['DPDP_Act_2023', 'ABDM_privacy_policy', 'IT_Act_2000'],
+            never_transmit: [
+              'raw_heart_rate_series',
+              'raw_gps_coordinates',
+              'sleep_stage_breakdown',
+              'blood_glucose_readings',
+              'menstrual_cycle_data',
+              'mental_health_indicators',
+            ],
+          },
+        },
+        credit: {
+          limits: {
+            min_credit_line_inr: 15000,
+            max_credit_line_inr: 500000,
+            nfc_offline_limit_inr: 5000,
+          },
+          scoring: {
+            thin_file_cibil_threshold: 650,
+            weight_normal: { cibil: 0.6, hrs: 0.4 },
+            weight_thin_file: { cibil: 0.4, hrs: 0.6 },
+          },
+        },
+        insurance: {
+          ubi: {
+            base_premium_delta_min_pct: -15,
+            base_premium_delta_max_pct: 15,
+            recalculation_frequency: 'monthly',
+            auto_switch_frequency: 'quarterly',
+          },
+          fraud_detection: {
+            auto_approve_below: 0.3,
+            human_review_range: [0.3, 0.7],
+            auto_reject_above: 0.7,
+          },
+        },
+        evaluation: {
+          guardrails: {
+            factual_grounding_threshold: 0.85,
+            irdai_compliance_threshold: 1.0,
+            toxicity_threshold: 0.95,
+          },
+          retry: { max_retries: 3, backoff_seconds: [1, 2, 4] },
+        },
+        feature_flags: {
+          federated_learning_enabled: true,
+          google_health_api_enabled: true,
+          nfc_offline_mode_enabled: true,
+          ubi_auto_switch_enabled: true,
+          multi_language_enabled: true,
+          wearable_fraud_signals_enabled: true,
+          abha_fhir_integration_enabled: true,
+          differential_privacy_enabled: true,
+        },
+      };
+
+      window.addEventListener('load', () => {
+        document.getElementById('agents-json-content').innerHTML =
+          syntaxHighlight(AGENTS_JSON);
+        document.getElementById('params-json-content').innerHTML =
+          syntaxHighlight(PARAMS_JSON);
+        document.getElementById('wf-json-content').innerHTML = syntaxHighlight({
+          schema_version: '1.0.0',
+          platform: 'SmartCover',
+          workflow_id: 'smartcover_main_pipeline',
+          phases: [
+            'phase_1_intake',
+            'phase_2_healthtech',
+            'phase_2_fintech',
+            'phase_2_insurtech',
+            'phase_2_claim',
+            'phase_2_faq',
+            'phase_3_synthesis',
+            'phase_4_delivery',
+          ],
+          note: 'See workflow.json for full phase and node definitions — 4 phases, 28 nodes, all connections defined.',
+        });
+        // Auto-select first node
+        selectNode('input');
+      });
+    </script>
+  </body>
+</html>
