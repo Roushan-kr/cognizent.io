@@ -7,7 +7,13 @@
     "default_language": "en",
     "supported_languages": ["en", "hi", "ta", "te", "bn", "mr"],
     "default_channel": "app",
-    "supported_channels": ["app", "whatsapp", "nfc", "hospital_fhir", "insurer_api"],
+    "supported_channels": [
+      "app",
+      "whatsapp",
+      "nfc",
+      "hospital_fhir",
+      "insurer_api"
+    ],
     "request_timeout_seconds": 30,
     "max_parallel_agents": 4
   },
@@ -37,8 +43,8 @@
       }
     },
     "hrs_weights": {
-      "step_count": 0.20,
-      "heart_rate_resting": 0.20,
+      "step_count": 0.2,
+      "heart_rate_resting": 0.2,
       "sleep_duration": 0.18,
       "active_minutes": 0.17,
       "blood_oxygen_spo2": 0.12,
@@ -47,10 +53,10 @@
     },
     "hrs_thresholds": {
       "excellent": { "min": 850, "max": 1000 },
-      "good":      { "min": 700, "max": 849 },
-      "fair":      { "min": 550, "max": 699 },
-      "moderate":  { "min": 400, "max": 549 },
-      "at_risk":   { "min": 0,   "max": 399 }
+      "good": { "min": 700, "max": 849 },
+      "fair": { "min": 550, "max": 699 },
+      "moderate": { "min": 400, "max": 549 },
+      "at_risk": { "min": 0, "max": 399 }
     },
     "privacy_rules": {
       "raw_data_leaves_device": false,
@@ -75,14 +81,14 @@
     },
     "scoring": {
       "thin_file_cibil_threshold": 650,
-      "weight_normal":   { "cibil": 0.60, "hrs": 0.40 },
-      "weight_thin_file": { "cibil": 0.40, "hrs": 0.60 },
+      "weight_normal": { "cibil": 0.6, "hrs": 0.4 },
+      "weight_thin_file": { "cibil": 0.4, "hrs": 0.6 },
       "hrs_boost_mapping": {
         "Excellent": 50000,
-        "Good":      25000,
-        "Fair":      0,
+        "Good": 25000,
+        "Fair": 0,
         "Moderate": -10000,
-        "At Risk":  -25000
+        "At Risk": -25000
       }
     },
     "interest": {
@@ -106,16 +112,16 @@
       "reindex_frequency": "daily"
     },
     "fraud_detection": {
-      "auto_approve_below": 0.30,
-      "human_review_min": 0.30,
-      "human_review_max": 0.70,
-      "auto_reject_above": 0.70,
+      "auto_approve_below": 0.3,
+      "human_review_min": 0.3,
+      "human_review_max": 0.7,
+      "auto_reject_above": 0.7,
       "signal_weights": {
         "wearable_accelerometer": 0.25,
-        "gps_location_match": 0.20,
+        "gps_location_match": 0.2,
         "fhir_record_consistency": 0.25,
-        "digilocker_authenticity": 0.20,
-        "claim_frequency_anomaly": 0.10
+        "digilocker_authenticity": 0.2,
+        "claim_frequency_anomaly": 0.1
       }
     },
     "irdai": {

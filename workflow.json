@@ -131,7 +131,12 @@
           "display": "Knowledge — ABHA / ABDM Records",
           "tool": "abha_fhir_reader",
           "description": "Fetch user's ABDM health summary (diagnoses, allergies, prior hospitalizations) for claim context. Minimal fields only.",
-          "fhir_resources": ["Patient", "Condition", "AllergyIntolerance", "Immunization"],
+          "fhir_resources": [
+            "Patient",
+            "Condition",
+            "AllergyIntolerance",
+            "Immunization"
+          ],
           "next": "health_output_merge"
         },
         {
@@ -169,15 +174,30 @@
           "type": "condition",
           "display": "Condition — Thin File?",
           "condition": "cibil_score < 650 OR thin_file == true",
-          "on_true": { "weight_hrs": 0.6, "weight_cibil": 0.4, "next": "credit_engine" },
-          "on_false": { "weight_hrs": 0.4, "weight_cibil": 0.6, "next": "credit_engine" }
+          "on_true": {
+            "weight_hrs": 0.6,
+            "weight_cibil": 0.4,
+            "next": "credit_engine"
+          },
+          "on_false": {
+            "weight_hrs": 0.4,
+            "weight_cibil": 0.6,
+            "next": "credit_engine"
+          }
         },
         {
           "node_id": "credit_engine",
           "type": "tool_call",
           "display": "Tool — Credit Engine (LightGBM)",
           "tool": "credit_engine_api",
-          "input": ["cibil_score", "hrs_band", "income_declared", "existing_emis", "weight_hrs", "weight_cibil"],
+          "input": [
+            "cibil_score",
+            "hrs_band",
+            "income_declared",
+            "existing_emis",
+            "weight_hrs",
+            "weight_cibil"
+          ],
           "output": {
             "credit_limit_inr": "integer",
             "credit_approved": "boolean",
@@ -211,8 +231,16 @@
           "type": "tool_call",
           "display": "Tool — BERT Policy Matcher",
           "tool": "bert_policy_matcher",
-          "input": ["user_health_profile_band", "age", "declared_conditions", "query_text"],
-          "output": { "matched_policies": "list[top_3]", "similarity_scores": "list[float]" },
+          "input": [
+            "user_health_profile_band",
+            "age",
+            "declared_conditions",
+            "query_text"
+          ],
+          "output": {
+            "matched_policies": "list[top_3]",
+            "similarity_scores": "list[float]"
+          },
           "next": "ubi_calculator"
         },
         {
@@ -220,7 +248,12 @@
           "type": "tool_call",
           "display": "Tool — UBI Premium Calculator",
           "tool": "ubi_calculator",
-          "input": ["hrs_band", "hrs_delta", "claim_history_12m", "base_premium"],
+          "input": [
+            "hrs_band",
+            "hrs_delta",
+            "claim_history_12m",
+            "base_premium"
+          ],
           "output": {
             "ubi_premium_delta_pct": "float_range_-15_to_15",
             "new_monthly_premium": "integer",
@@ -284,7 +317,12 @@
           "display": "Tool — FHIR Claim Processor",
           "tool": "fhir_claim_processor",
           "standard": "HL7_FHIR_R4",
-          "input": ["abha_id", "hospital_id", "admission_diagnosis_code", "estimated_amount_inr"],
+          "input": [
+            "abha_id",
+            "hospital_id",
+            "admission_diagnosis_code",
+            "estimated_amount_inr"
+          ],
           "output": { "claim_ref_id": "string", "fhir_claim_object": "object" },
           "next": "hospital_auth_api"
         },
@@ -320,7 +358,10 @@
           "display": "Tool — Claim Auto-Approve",
           "tool": "claim_approver",
           "sla_hours": 2,
-          "output": { "claim_status": "approved", "settlement_amount_inr": "integer" },
+          "output": {
+            "claim_status": "approved",
+            "settlement_amount_inr": "integer"
+          },
           "next": "claim_output_merge"
         },
         {
@@ -328,7 +369,10 @@
           "type": "tool_call",
           "display": "Tool — Claim Reject",
           "tool": "claim_approver",
-          "output": { "claim_status": "rejected", "rejection_reason": "string" },
+          "output": {
+            "claim_status": "rejected",
+            "rejection_reason": "string"
+          },
           "next": "claim_output_merge"
         },
         {
@@ -367,7 +411,10 @@
           "tool": "faq_retriever",
           "index": "shared_faq_policy_faiss",
           "top_k": 3,
-          "output": { "retrieved_passages": "list[top_3]", "source_ids": "list[string]" },
+          "output": {
+            "retrieved_passages": "list[top_3]",
+            "source_ids": "list[string]"
+          },
           "next": "faq_loop"
         },
         {
@@ -397,7 +444,13 @@
           "type": "merge",
           "display": "Merge / Join",
           "description": "Aggregate all active agent branch outputs. Priority: claim > insurtech > fintech > healthtech > faq",
-          "priority_order": ["claim_agent", "insurtech_agent", "fintech_agent", "healthtech_agent", "faq_agent"],
+          "priority_order": [
+            "claim_agent",
+            "insurtech_agent",
+            "fintech_agent",
+            "healthtech_agent",
+            "faq_agent"
+          ],
           "conflict_resolution": "higher_confidence_wins",
           "timeout_seconds": 5,
           "on_timeout": "use_partial_results_with_staleness_flag",
@@ -464,10 +517,20 @@
           "type": "formatter",
           "display": "Output Formatter",
           "formats": {
-            "app": { "schema": "{ title, body, cta, claim_ref }", "type": "JSON" },
-            "whatsapp": { "schema": "plain_text", "max_chars": 1600, "emoji_allowed": true },
+            "app": {
+              "schema": "{ title, body, cta, claim_ref }",
+              "type": "JSON"
+            },
+            "whatsapp": {
+              "schema": "plain_text",
+              "max_chars": 1600,
+              "emoji_allowed": true
+            },
             "nfc": { "schema": "2_lines_max_40_chars_each", "type": "minimal" },
-            "hospital_fhir": { "schema": "HL7_ClaimResponse_R4", "type": "FHIR" },
+            "hospital_fhir": {
+              "schema": "HL7_ClaimResponse_R4",
+              "type": "FHIR"
+            },
             "insurer_api": { "schema": "risk_signal_JSON", "type": "JSON" }
           },
           "inject_metadata": ["response_id", "agent_trace_id"],

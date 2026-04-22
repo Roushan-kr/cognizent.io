@@ -13,7 +13,13 @@
       "system_prompt": "You are SmartCover's routing orchestrator. Classify the user's intent into one or more domains: health_query, credit_query, insurance_query, claim_query, faq. Output ONLY a JSON intent object. Never fabricate health or financial data.",
       "output_schema": {
         "type": "intent",
-        "fields": ["primary_domain", "secondary_domains", "urgency", "channel", "language"]
+        "fields": [
+          "primary_domain",
+          "secondary_domains",
+          "urgency",
+          "channel",
+          "language"
+        ]
       },
       "privacy_tier": "tier_1_minimal",
       "tools_allowed": ["intent_classifier", "language_detector"],
@@ -52,11 +58,31 @@
           "method": "federated_local_model",
           "output_only": "HRS_band",
           "HRS_bands": {
-            "850-1000": { "label": "Excellent", "premium_delta": -0.15, "credit_boost": 50000 },
-            "700-849":  { "label": "Good",      "premium_delta": -0.08, "credit_boost": 25000 },
-            "550-699":  { "label": "Fair",       "premium_delta": 0.0,   "credit_boost": 0 },
-            "400-549":  { "label": "Moderate",   "premium_delta": 0.08,  "credit_boost": -10000 },
-            "0-399":    { "label": "At Risk",     "premium_delta": 0.15,  "credit_boost": -25000 }
+            "850-1000": {
+              "label": "Excellent",
+              "premium_delta": -0.15,
+              "credit_boost": 50000
+            },
+            "700-849": {
+              "label": "Good",
+              "premium_delta": -0.08,
+              "credit_boost": 25000
+            },
+            "550-699": {
+              "label": "Fair",
+              "premium_delta": 0.0,
+              "credit_boost": 0
+            },
+            "400-549": {
+              "label": "Moderate",
+              "premium_delta": 0.08,
+              "credit_boost": -10000
+            },
+            "0-399": {
+              "label": "At Risk",
+              "premium_delta": 0.15,
+              "credit_boost": -25000
+            }
           },
           "never_share": [
             "raw_heart_rate_series",
@@ -87,7 +113,12 @@
       "privacy_tier": "tier_2_financial",
       "credit_engine": {
         "model": "LightGBM_stacking",
-        "inputs": ["cibil_score", "hrs_band", "income_declared", "existing_emis"],
+        "inputs": [
+          "cibil_score",
+          "hrs_band",
+          "income_declared",
+          "existing_emis"
+        ],
         "weight_normal": { "cibil": 0.6, "hrs": 0.4 },
         "weight_thin_file": { "cibil": 0.4, "hrs": 0.6 },
         "thin_file_threshold": 650,
@@ -101,7 +132,12 @@
         "fraud_treatment": "interest_bearing_credit",
         "emergency_auth": "card_tap_no_internet"
       },
-      "tools_allowed": ["cibil_api", "credit_engine_api", "nfc_card_manager", "emi_calculator"],
+      "tools_allowed": [
+        "cibil_api",
+        "credit_engine_api",
+        "nfc_card_manager",
+        "emi_calculator"
+      ],
       "memory_read": ["credit_history", "active_emi_list", "hrs_current"],
       "memory_write": ["credit_limit_updated", "emi_schedule"]
     },
@@ -145,7 +181,7 @@
         "auto_approve_below": 0.3,
         "human_review_range": [0.3, 0.7],
         "auto_reject_above": 0.7,
-        "target_reduction": 0.70
+        "target_reduction": 0.7
       },
       "tools_allowed": [
         "bert_policy_matcher",
@@ -154,7 +190,12 @@
         "claim_approver",
         "irdai_policy_db"
       ],
-      "memory_read": ["active_policy", "claim_history_12m", "hrs_current", "hrs_delta"],
+      "memory_read": [
+        "active_policy",
+        "claim_history_12m",
+        "hrs_current",
+        "hrs_delta"
+      ],
       "memory_write": ["premium_updated", "claim_status", "fraud_score"]
     },
     "claim_agent": {
@@ -175,7 +216,13 @@
         "standard": "HL7_FHIR_R4",
         "auth_protocol": "NFC_card_tap",
         "payment_guarantee": "on_admission",
-        "fhir_resources": ["Claim", "ClaimResponse", "Coverage", "Patient", "Encounter"]
+        "fhir_resources": [
+          "Claim",
+          "ClaimResponse",
+          "Coverage",
+          "Patient",
+          "Encounter"
+        ]
       },
       "tools_allowed": [
         "fhir_claim_processor",
