@@ -1,0 +1,1173 @@
+{
+  "schema_version": "2.0.0",
+  "platform": "SmartCover",
+  "workflow_id": "smartcover_optimized_pipeline",
+  "description": "Optimized LangGraph workflow with early validation, dynamic merging, explicit agent contracts, and improved error handling",
+  "improvements": {
+    "v1_to_v2": [
+      "Merged context_injection + classifier into single LLM call (reduced latency)",
+      "Added explicit agent output schemas for type safety",
+      "Changed phase 2 to true parallel execution with dynamic merge",
+      "Moved validation before synthesis (avoid wasted retries)",
+      "Centralized privacy enforcement at orchestrator level",
+      "Decomposed claim agent into smaller sub-steps",
+      "Added tool-level error handling and graceful degradation",
+      "Defined clear state ownership per agent domain",
+      "Simplified human handoff logic (single interrupt node)",
+      "Added early-exit for FAQ-only queries"
+    ]
+  },
+  "langgraph_config": {
+    "state_store": "redis",
+    "state_ttl_hours": 72,
+    "max_turns": 10,
+    "thread_id_format": "sc_{channel}_{user_id}_{timestamp}",
+    "tracing": "langsmith",
+    "audit_retention_years": 7,
+    "state_machine": {
+      "checkpoints": [
+        "phase_1_complete",
+        "agents_complete",
+        "validation_pass",
+        "delivery_complete"
+      ],
+      "state_schema": {
+        "user_id": "string",
+        "channel": "string",
+        "input_message": "string",
+        "intent": "object{domain, confidence, urgency, language}",
+        "consent": "object{health_data, financial_data, location}",
+        "agent_results": "object{health?, credit?, insurance?, claim?, faq?}",
+        "validation_results": "object{factual_grounding, irdai_compliance, toxicity}",
+        "synthesis_response": "string",
+        "delivery_status": "string"
+      }
+    }
+  },
+  "phases": [
+    {
+      "phase_id": "phase_0_privacy_consent",
+      "name": "Privacy & Consent Gate (Centralized)",
+      "description": "Single entry point for all privacy compliance checks. Blocks processing if consent missing.",
+      "nodes": [
+        {
+          "node_id": "input_gateway",
+          "type": "entry",
+          "display": "Input Gateway",
+          "description": "User message arrives via app, NFC tap, WhatsApp, or wearable alert",
+          "channels": ["app", "whatsapp", "nfc_tap", "wearable_alert"],
+          "normalize": {
+            "extract": [
+              "channel",
+              "user_id",
+              "session_id",
+              "timestamp",
+              "raw_message"
+            ],
+            "validation": "no_null_required_fields"
+          },
+          "next": "privacy_consent_check"
+        },
+        {
+          "node_id": "privacy_consent_check",
+          "type": "privacy_gate",
+          "display": "Privacy & Consent Check",
+          "description": "Verify DPDP, ABDM, IT Act compliance. Check consent scopes before routing to agents.",
+          "checks": [
+            {
+              "name": "dpdp_act_2023",
+              "description": "Data Protection Act 2023 compliance",
+              "severity": "HARD_BLOCK"
+            },
+            {
+              "name": "user_consent_health",
+              "description": "Health data processing consent (required for healthtech agent)",
+              "severity": "HARD_BLOCK"
+            },
+            {
+              "name": "user_consent_financial",
+              "description": "Financial data processing consent (required for fintech agent)",
+              "severity": "HARD_BLOCK"
+            },
+            {
+              "name": "user_consent_location",
+              "description": "Location data processing consent (optional, used for fraud signals)",
+              "severity": "SOFT_BLOCK"
+            },
+            {
+              "name": "abdm_privacy_policy",
+              "description": "ABDM health record privacy rules",
+              "severity": "HARD_BLOCK"
+            }
+          ],
+          "on_hard_block_fail": {
+            "action": "halt_and_respond",
+            "response_template": "privacy_block_{blocked_consent}",
+            "escalate_to": "none"
+          },
+          "on_soft_block_fail": {
+            "action": "continue_with_feature_gate",
+            "disabled_features": [
+              "fraud_detection_gps",
+              "fraud_detection_accelerometer"
+            ],
+            "log_degradation": true
+          },
+          "next": "memory_load"
+        },
+        {
+          "node_id": "memory_load",
+          "type": "memory_read",
+          "display": "Load Context (Parallel)",
+          "description": "Parallel read from multiple state stores. Non-blocking (staleness tolerance: 10 minutes).",
+          "parallel_reads": [
+            {
+              "store": "redis",
+              "key_pattern": "sc:conversation:{user_id}:turns",
+              "ttl_hours": 72,
+              "fetch": ["last_5_turns", "intent_history"]
+            },
+            {
+              "store": "healthtech_store",
+              "key_pattern": "user:{user_id}:health",
+              "fetch": [
+                "hrs_current",
+                "hrs_30d_history",
+                "hrs_band",
+                "hrs_delta"
+              ],
+              "fallback": "cached_value_with_staleness_flag"
+            },
+            {
+              "store": "fintech_store",
+              "key_pattern": "user:{user_id}:credit",
+              "fetch": ["credit_limit_inr", "available_balance", "card_status"],
+              "fallback": "fail_gracefully"
+            },
+            {
+              "store": "insurtech_store",
+              "key_pattern": "user:{user_id}:insurance",
+              "fetch": ["active_policy_id", "monthly_premium_inr", "ubi_band"],
+              "fallback": "null"
+            },
+            {
+              "store": "abha",
+              "key_pattern": "{user_id}:summary",
+              "fetch": ["recent_conditions", "allergies"],
+              "fallback": "empty_array"
+            }
+          ],
+          "timeout_seconds": 3,
+          "partial_success_ok": true,
+          "next": "classifier_and_context"
+        }
+      ]
+    },
+    {
+      "phase_id": "phase_1_intake",
+      "name": "Intent Classification & Context Injection (Combined)",
+      "description": "Single LLM call: classify intent + format context for downstream agents. Replaced two separate LLM calls.",
+      "nodes": [
+        {
+          "node_id": "classifier_and_context",
+          "type": "llm",
+          "display": "LLM — Intent + Context",
+          "model": "claude-sonnet-4-20250514",
+          "temperature": 0.1,
+          "max_tokens": 512,
+          "output_format": "json_schema",
+          "system_prompt": "You are SmartCover's intake classifier. Analyze the user message and loaded context (HRS, credit limit, policy, conversation history). Output a JSON intent object. Rules: (1) Be conservative—if intent confidence < 0.7, set primary to 'clarify'. (2) Never infer data not in context. (3) If multi-domain, list all domains in secondary_domains array.",
+          "input_context": [
+            "raw_user_message",
+            "loaded_memory: {hrs_band, credit_limit_inr, policy_id, last_5_turns}",
+            "channel",
+            "user_language"
+          ],
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "primary_intent": {
+                "type": "string",
+                "enum": [
+                  "health_query",
+                  "credit_query",
+                  "insurance_query",
+                  "claim_query",
+                  "faq_query",
+                  "clarify"
+                ],
+                "description": "Main intent"
+              },
+              "secondary_intents": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Additional intents if multi-domain"
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Confidence score for primary_intent"
+              },
+              "urgency": {
+                "type": "string",
+                "enum": ["routine", "priority", "emergency"],
+                "description": "Escalation level"
+              },
+              "extracted_entities": {
+                "type": "object",
+                "properties": {
+                  "symptom": "string (if health query)",
+                  "claim_amount": "number (if claim query)",
+                  "policy_id": "string (if insurance query)",
+                  "question_topic": "string (if faq)"
+                }
+              },
+              "language": {
+                "type": "string",
+                "enum": ["en", "hi", "ta", "te", "bn", "mr"],
+                "description": "Detected language"
+              }
+            },
+            "required": ["primary_intent", "confidence", "urgency", "language"]
+          },
+          "next": "router_and_parallel_dispatch"
+        },
+        {
+          "node_id": "router_and_parallel_dispatch",
+          "type": "conditional_router",
+          "display": "Router — Parallel Dispatch",
+          "description": "Route to agents based on intent. Multi-domain queries spawn parallel agent branches.",
+          "routing_rules": [
+            {
+              "condition": "primary_intent == 'faq_query' AND secondary_intents.length == 0",
+              "route": "faq_agent_only",
+              "description": "Early exit for FAQ—no need to run other agents"
+            },
+            {
+              "condition": "primary_intent == 'clarify'",
+              "route": "clarification_loop",
+              "description": "Ask user for clarification"
+            },
+            {
+              "condition": "urgency == 'emergency'",
+              "route": "emergency_handler",
+              "description": "Fast-track to human + relevant agent"
+            },
+            {
+              "condition": "primary_intent != 'clarify'",
+              "route": "parallel_agent_dispatch",
+              "dispatch": [
+                {
+                  "agent": "healthtech_agent",
+                  "condition": "('health_query' in [primary_intent, ...secondary_intents]) AND consent.health_data",
+                  "timeout_seconds": 4
+                },
+                {
+                  "agent": "fintech_agent",
+                  "condition": "('credit_query' in [primary_intent, ...secondary_intents]) AND consent.financial_data",
+                  "timeout_seconds": 3
+                },
+                {
+                  "agent": "insurtech_agent",
+                  "condition": "('insurance_query' in [primary_intent, ...secondary_intents]) AND consent.financial_data",
+                  "timeout_seconds": 3
+                },
+                {
+                  "agent": "claim_agent",
+                  "condition": "('claim_query' in [primary_intent, ...secondary_intents]) AND (consent.health_data AND consent.financial_data)",
+                  "timeout_seconds": 5
+                },
+                {
+                  "agent": "faq_agent",
+                  "condition": "'faq_query' in secondary_intents",
+                  "timeout_seconds": 2
+                }
+              ],
+              "parallel_execution": true,
+              "description": "Run all applicable agents in parallel with independent timeouts"
+            }
+          ],
+          "default_route": "phase_2_agents"
+        }
+      ]
+    },
+    {
+      "phase_id": "phase_2_agents",
+      "name": "Multi-Agent Execution (Parallel)",
+      "description": "5 independent agents run in parallel. Each has explicit output contract. Supports dynamic merge (early completion).",
+      "parallel_timeout_seconds": 8,
+      "merge_strategy": "dynamic",
+      "merge_description": "Collect agent results as they complete. Don't wait for all agents. Use confidence scores to rank results.",
+      "agents": [
+        {
+          "agent_id": "healthtech_agent",
+          "display_name": "HealthTech Agent",
+          "role": "Health Risk Score computation, wearable processing, ABHA lookup",
+          "timeout_seconds": 4,
+          "on_timeout": "return_stale_cache_with_flag",
+          "state_owner": "healthtech_store",
+          "output_contract": {
+            "type": "object",
+            "properties": {
+              "hrs_score": { "type": "integer", "minimum": 0, "maximum": 1000 },
+              "hrs_band": {
+                "type": "string",
+                "enum": ["Excellent", "Good", "Fair", "Moderate", "At Risk"]
+              },
+              "hrs_delta_30d": {
+                "type": "integer",
+                "description": "Change from 30 days ago"
+              },
+              "premium_delta_pct": {
+                "type": "number",
+                "description": "UBI premium impact"
+              },
+              "credit_boost_inr": { "type": "integer" },
+              "abha_summary": {
+                "type": "object",
+                "properties": {
+                  "recent_conditions": "array",
+                  "allergies": "array"
+                }
+              },
+              "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+              "data_staleness_minutes": {
+                "type": "integer",
+                "description": "Minutes since last update"
+              }
+            },
+            "required": ["hrs_score", "hrs_band", "confidence"]
+          },
+          "nodes": [
+            {
+              "node_id": "health_privacy_check",
+              "type": "validation",
+              "checks": ["consent.health_data", "dpdp_act_2023_compliant"],
+              "on_fail": "halt_with_error"
+            },
+            {
+              "node_id": "health_tool_call",
+              "type": "tool_call",
+              "tool": "hrs_api",
+              "input": ["user_id", "window_days"],
+              "timeout_seconds": 2,
+              "on_timeout": "return_cached_hrs_with_staleness_flag",
+              "on_error": "return_fallback_band"
+            },
+            {
+              "node_id": "abha_lookup_parallel",
+              "type": "tool_call",
+              "tool": "abha_fhir_reader",
+              "input": ["user_id", "minimal_fields_only"],
+              "timeout_seconds": 1,
+              "on_timeout": "skip_abha_continue",
+              "on_error": "return_empty_summary"
+            },
+            {
+              "node_id": "health_output_format",
+              "type": "output_formatter",
+              "format": "output_contract",
+              "required_fields": ["hrs_score", "hrs_band", "confidence"]
+            }
+          ]
+        },
+        {
+          "agent_id": "fintech_agent",
+          "display_name": "FinTech Agent",
+          "role": "Credit line computation, NFC card management, EMI structuring",
+          "timeout_seconds": 3,
+          "on_timeout": "return_cached_limit_with_staleness_flag",
+          "state_owner": "fintech_store",
+          "output_contract": {
+            "type": "object",
+            "properties": {
+              "credit_limit_inr": { "type": "integer", "minimum": 0 },
+              "available_balance_inr": { "type": "integer", "minimum": 0 },
+              "credit_band": {
+                "type": "string",
+                "enum": ["Tier-1", "Tier-2", "Tier-3", "Insufficient"]
+              },
+              "nfc_offline_limit_inr": { "type": "integer", "default": 5000 },
+              "decision_rationale": { "type": "string" },
+              "shap_factors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": { "factor": "string", "impact_pct": "number" }
+                }
+              },
+              "card_status": {
+                "type": "string",
+                "enum": ["active", "inactive", "locked", "expired"]
+              },
+              "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+            },
+            "required": ["credit_limit_inr", "credit_band", "confidence"]
+          },
+          "nodes": [
+            {
+              "node_id": "fintech_consent_check",
+              "type": "validation",
+              "checks": ["consent.financial_data"],
+              "on_fail": "halt_with_error"
+            },
+            {
+              "node_id": "cibil_fetch",
+              "type": "tool_call",
+              "tool": "cibil_api",
+              "input": ["user_id"],
+              "timeout_seconds": 1,
+              "on_timeout": "return_cached_cibil",
+              "cache_ttl_days": 90
+            },
+            {
+              "node_id": "credit_engine_call",
+              "type": "tool_call",
+              "tool": "credit_engine_api",
+              "input": ["user_id", "cibil_score", "hrs_score"],
+              "timeout_seconds": 1,
+              "on_error": "return_fallback_tier3_limit"
+            },
+            {
+              "node_id": "nfc_card_status",
+              "type": "tool_call",
+              "tool": "nfc_card_api",
+              "input": ["user_id"],
+              "timeout_seconds": 1,
+              "on_timeout": "skip_card_status_continue"
+            },
+            {
+              "node_id": "fintech_output_format",
+              "type": "output_formatter",
+              "format": "output_contract"
+            }
+          ]
+        },
+        {
+          "agent_id": "insurtech_agent",
+          "display_name": "InsurTech Agent",
+          "role": "BERT policy matching, UBI premium recalculation, fraud scoring",
+          "timeout_seconds": 3,
+          "on_timeout": "return_cached_policy_with_staleness_flag",
+          "state_owner": "insurtech_store",
+          "output_contract": {
+            "type": "object",
+            "properties": {
+              "matched_policies": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 3,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "policy_id": "string",
+                    "policy_name": "string",
+                    "similarity_score": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "monthly_premium_inr": "integer"
+                  }
+                }
+              },
+              "ubi_premium_delta_pct": {
+                "type": "number",
+                "minimum": -15,
+                "maximum": 15
+              },
+              "ubi_factors": {
+                "type": "array",
+                "description": "Why premium changed"
+              },
+              "fraud_risk_score": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "fraud_signals": {
+                "type": "array",
+                "description": "Which signals triggered"
+              },
+              "recommendation": {
+                "type": "string",
+                "enum": ["auto_approve", "human_review", "auto_reject"]
+              },
+              "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+            },
+            "required": [
+              "matched_policies",
+              "fraud_risk_score",
+              "recommendation",
+              "confidence"
+            ]
+          },
+          "nodes": [
+            {
+              "node_id": "insurtech_consent_check",
+              "type": "validation",
+              "checks": ["consent.financial_data"],
+              "on_fail": "halt_with_error"
+            },
+            {
+              "node_id": "bert_policy_match",
+              "type": "tool_call",
+              "tool": "bert_policy_matcher",
+              "input": ["user_id", "hrs_band", "query_embedding"],
+              "timeout_seconds": 2,
+              "on_timeout": "return_cached_matches"
+            },
+            {
+              "node_id": "ubi_calculator",
+              "type": "tool_call",
+              "tool": "ubi_calculator",
+              "input": ["hrs_band", "hrs_delta", "claim_frequency_12m"],
+              "timeout_seconds": 1,
+              "on_error": "return_zero_delta"
+            },
+            {
+              "node_id": "fraud_detector",
+              "type": "tool_call",
+              "tool": "fraud_detector",
+              "input": ["user_id", "claim_context_if_exists"],
+              "timeout_seconds": 2,
+              "on_error": "return_neutral_score_0_5"
+            },
+            {
+              "node_id": "insurtech_output_format",
+              "type": "output_formatter",
+              "format": "output_contract"
+            }
+          ]
+        },
+        {
+          "agent_id": "claim_agent",
+          "display_name": "Claim Processing Agent",
+          "role": "Cashless claim lifecycle: filing → auth → approval",
+          "timeout_seconds": 5,
+          "state_owner": "claim_store",
+          "output_contract": {
+            "type": "object",
+            "properties": {
+              "claim_id": { "type": "string" },
+              "claim_status": {
+                "type": "string",
+                "enum": [
+                  "filed",
+                  "auth_granted",
+                  "approved",
+                  "rejected",
+                  "pending_human_review"
+                ]
+              },
+              "settlement_amount_inr": { "type": "integer", "minimum": 0 },
+              "hospital_auth_granted": { "type": "boolean" },
+              "fraud_score": { "type": "number", "minimum": 0, "maximum": 1 },
+              "decision_reason": { "type": "string" },
+              "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+            },
+            "required": [
+              "claim_id",
+              "claim_status",
+              "fraud_score",
+              "confidence"
+            ]
+          },
+          "nodes": [
+            {
+              "node_id": "claim_consent_check",
+              "type": "validation",
+              "checks": ["consent.health_data", "consent.financial_data"],
+              "on_fail": "halt_with_error"
+            },
+            {
+              "node_id": "claim_filing",
+              "type": "tool_call",
+              "tool": "fhir_claim_processor",
+              "input": ["user_id", "hospital_id", "admission_diagnosis"],
+              "timeout_seconds": 2,
+              "on_error": "halt_claim_processing"
+            },
+            {
+              "node_id": "hospital_auth_call",
+              "type": "tool_call",
+              "tool": "hospital_auth_api",
+              "input": ["claim_id", "credit_limit_inr"],
+              "timeout_seconds": 1,
+              "on_timeout": "escalate_to_human",
+              "sla_ms": 500
+            },
+            {
+              "node_id": "claim_fraud_gate",
+              "type": "conditional",
+              "condition": "fraud_score < 0.3",
+              "on_true": { "next": "claim_auto_approve" },
+              "on_false": {
+                "condition_nested": "fraud_score > 0.7",
+                "on_true": { "next": "claim_auto_reject" },
+                "on_false": { "next": "claim_human_review" }
+              }
+            },
+            {
+              "node_id": "claim_auto_approve",
+              "type": "tool_call",
+              "tool": "claim_approver",
+              "input": ["claim_id"],
+              "timeout_seconds": 1,
+              "next": "claim_output_format"
+            },
+            {
+              "node_id": "claim_auto_reject",
+              "type": "tool_call",
+              "tool": "claim_rejector",
+              "input": ["claim_id", "reason"],
+              "timeout_seconds": 1,
+              "next": "claim_output_format"
+            },
+            {
+              "node_id": "claim_human_review",
+              "type": "flag_for_interrupt",
+              "interrupt_type": "claim_underwriter_review",
+              "priority": "high",
+              "next": "claim_output_format"
+            },
+            {
+              "node_id": "claim_output_format",
+              "type": "output_formatter",
+              "format": "output_contract"
+            }
+          ]
+        },
+        {
+          "agent_id": "faq_agent",
+          "display_name": "FAQ & Knowledge Agent",
+          "role": "Semantic search over FAQ + policy knowledge base",
+          "timeout_seconds": 2,
+          "state_owner": "faq_store",
+          "output_contract": {
+            "type": "object",
+            "properties": {
+              "answer_text": { "type": "string" },
+              "source_documents": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "doc_id": "string",
+                    "relevance_score": "number"
+                  }
+                }
+              },
+              "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+              "requires_human_review": { "type": "boolean" }
+            },
+            "required": ["answer_text", "confidence"]
+          },
+          "nodes": [
+            {
+              "node_id": "faq_retrieval",
+              "type": "tool_call",
+              "tool": "faq_retriever",
+              "input": ["query_embedding", "top_k"],
+              "timeout_seconds": 1,
+              "on_timeout": "return_generic_response"
+            },
+            {
+              "node_id": "faq_llm_format",
+              "type": "llm",
+              "model": "claude-sonnet-4-20250514",
+              "temperature": 0.3,
+              "max_tokens": 300,
+              "prompt": "Format this FAQ content for user: {retrieved_content}. Be concise and accurate.",
+              "timeout_seconds": 1,
+              "on_timeout": "return_raw_document"
+            },
+            {
+              "node_id": "faq_output_format",
+              "type": "output_formatter",
+              "format": "output_contract"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "phase_id": "phase_2a_dynamic_merge",
+      "name": "Dynamic Merge (Collect Agent Results)",
+      "description": "Collect results as agents complete. Don't wait for slow agents. Use time-based or confidence-based cutoff.",
+      "nodes": [
+        {
+          "node_id": "dynamic_merge",
+          "type": "merge",
+          "display": "Dynamic Merge",
+          "merge_strategy": "earliest_completion",
+          "collection_rules": {
+            "max_wait_seconds": 8,
+            "min_confidence_threshold": 0.6,
+            "collect_until": "any_of [all_agents_returned, max_wait_exceeded, confidence_threshold_met]",
+            "priority_ranking": [
+              {
+                "agent": "claim_agent",
+                "priority": 1,
+                "reason": "Time-sensitive"
+              },
+              {
+                "agent": "insurtech_agent",
+                "priority": 2,
+                "reason": "Financial decision"
+              },
+              { "agent": "fintech_agent", "priority": 3 },
+              { "agent": "healthtech_agent", "priority": 4 },
+              { "agent": "faq_agent", "priority": 5 }
+            ]
+          },
+          "output": {
+            "completed_agents": "list[agent_id]",
+            "results": "object{agent_id: agent_output_contract}",
+            "staleness_flags": "object{agent_id: {minutes_stale, from_cache}}",
+            "missing_agents": "list[agent_id]"
+          },
+          "next": "early_validation"
+        }
+      ]
+    },
+    {
+      "phase_id": "phase_3_validation",
+      "name": "Early Validation (Before LLM Synthesis)",
+      "description": "Run validation checks on agent outputs before expensive LLM synthesis. Fail fast, avoid wasted retries.",
+      "nodes": [
+        {
+          "node_id": "early_validation",
+          "type": "evaluator",
+          "display": "Early Validation Layer",
+          "checks": [
+            {
+              "name": "agent_output_schema",
+              "description": "Validate all returned objects against their output_contract schemas",
+              "severity": "HARD_FAIL",
+              "on_fail": "reject_agent_output_use_fallback"
+            },
+            {
+              "name": "claim_fraud_consistency",
+              "description": "If claim_agent returned fraud_score > 0.7, it must set status != 'approved'",
+              "condition": "claim_agent_present",
+              "severity": "HARD_FAIL"
+            },
+            {
+              "name": "credit_limit_sanity",
+              "description": "Credit limit must be within params.json min/max bounds",
+              "condition": "fintech_agent_present",
+              "severity": "HARD_FAIL",
+              "on_fail": "clamp_to_valid_range"
+            },
+            {
+              "name": "policy_similarity_consistency",
+              "description": "Top matched policy similarity_score >= min_similarity threshold (0.72)",
+              "condition": "insurtech_agent_present",
+              "severity": "SOFT_FAIL",
+              "on_fail": "continue_with_degradation_flag"
+            },
+            {
+              "name": "mutual_consistency",
+              "description": "If HRS is 'Excellent' and fraud_score is 0.9, flag for human review",
+              "condition": "healthtech_agent_present AND claim_agent_present",
+              "severity": "SOFT_FAIL"
+            }
+          ],
+          "fail_strategy": "selective_retry_or_fallback",
+          "pass_threshold": 0.85,
+          "on_pass": "llm_synthesis",
+          "on_fail": "validation_failure_handler"
+        },
+        {
+          "node_id": "validation_failure_handler",
+          "type": "conditional",
+          "display": "Validation Failure Handler",
+          "routing": {
+            "hard_fail": {
+              "action": "escalate_to_human",
+              "log_level": "error",
+              "next": "human_interrupt_node"
+            },
+            "soft_fail": {
+              "action": "continue_with_degradation_flag",
+              "log_level": "warning",
+              "next": "llm_synthesis"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "phase_id": "phase_4_synthesis",
+      "name": "LLM Synthesis & Response Generation",
+      "description": "Generate final response using validated agent outputs. No more retries if validation passed.",
+      "nodes": [
+        {
+          "node_id": "llm_synthesis",
+          "type": "llm",
+          "display": "LLM — Final Synthesis",
+          "model": "claude-sonnet-4-20250514",
+          "temperature": 0.4,
+          "max_tokens_by_channel": {
+            "app": 800,
+            "whatsapp": 400,
+            "nfc": 200,
+            "hospital_fhir": 500,
+            "insurer_api": 400
+          },
+          "system_prompt": "You are SmartCover's main response agent. Rules: (1) NEVER make promises about coverage not confirmed by InsurTech agent. (2) For claims, always state claim_id. (3) Keep language simple for {language}-speaking user. (4) Tone: warm, empowering, factual. (5) Do NOT infer data outside agent outputs. (6) If any agent timed out (check staleness_flags), mention this: 'This data may be slightly outdated.'",
+          "input": {
+            "agent_results": "from dynamic_merge node",
+            "user_intent": "primary_intent, extracted_entities",
+            "user_language": "language from classifier",
+            "channel": "channel",
+            "degradation_flags": "from validation layer"
+          },
+          "output_format": "plain_text",
+          "next": "response_formatter"
+        },
+        {
+          "node_id": "response_formatter",
+          "type": "formatter",
+          "display": "Response Formatter (Channel-Specific)",
+          "format_rules": {
+            "app": {
+              "schema": "json",
+              "structure": {
+                "message": "string",
+                "metadata": "object",
+                "actions": "array"
+              },
+              "include": ["agent_trace_ids", "response_id"]
+            },
+            "whatsapp": {
+              "schema": "text_with_emoji",
+              "max_length": 1024,
+              "structure": "plain_message_with_optional_list"
+            },
+            "nfc": {
+              "schema": "minimal_text",
+              "max_lines": 2,
+              "max_chars_per_line": 40
+            },
+            "hospital_fhir": {
+              "schema": "hl7_fhir_r4",
+              "structure": "FHIR_Communication_resource"
+            },
+            "insurer_api": {
+              "schema": "json",
+              "structure": {
+                "risk_signals": "array",
+                "recommendation": "string"
+              }
+            }
+          },
+          "next": "guardrail_checks"
+        }
+      ]
+    },
+    {
+      "phase_id": "phase_5_guardrails",
+      "name": "Final Guardrail Checks (Post-LLM)",
+      "description": "Apply IRDAI compliance, toxicity, and factual grounding checks on final response.",
+      "nodes": [
+        {
+          "node_id": "guardrail_checks",
+          "type": "evaluator",
+          "display": "Guardrail Evaluator",
+          "checks": [
+            {
+              "name": "factual_grounding",
+              "description": "Response facts must be a subset of agent tool outputs",
+              "pass_threshold": 0.85
+            },
+            {
+              "name": "irdai_compliance",
+              "description": "Insurance claims must include disclaimers, no false promises",
+              "condition": "insurtech_agent_present OR claim_agent_present",
+              "pass_threshold": 1.0
+            },
+            {
+              "name": "toxicity",
+              "description": "No hate speech, violence, or harmful content",
+              "pass_threshold": 0.95
+            },
+            {
+              "name": "personal_data_leakage",
+              "description": "Response must not expose PII beyond what user disclosed",
+              "pass_threshold": 1.0
+            }
+          ],
+          "run_parallel": true,
+          "overall_pass_threshold": 0.85,
+          "on_pass": "memory_save",
+          "on_fail": "retry_with_constraints"
+        },
+        {
+          "node_id": "retry_with_constraints",
+          "type": "retry",
+          "display": "Constrained Retry",
+          "description": "Only retry the LLM synthesis with stricter constraints. Do NOT re-run agents.",
+          "max_retries": 2,
+          "backoff_seconds": [1, 2],
+          "constraint_template": "Previous response failed: {failed_check_name}. Regenerate response with this constraint: {constraint_instruction}",
+          "on_all_fail": "fallback_response",
+          "fallback_template": "I wasn't able to provide a complete response automatically. Your reference is {request_id}. Our team will contact you within {sla_hours} hours. For emergencies: tap your SmartCover card at any partner hospital or call {support_number}.",
+          "next": "memory_save"
+        }
+      ]
+    },
+    {
+      "phase_id": "phase_6_persistence",
+      "name": "Memory, Events & Delivery",
+      "description": "Persist conversation, emit events, deliver response. All async where possible.",
+      "nodes": [
+        {
+          "node_id": "memory_save",
+          "type": "memory_write",
+          "display": "Memory Save (Async)",
+          "async": true,
+          "priority": "high",
+          "writes": [
+            {
+              "store": "redis",
+              "key": "sc:conversation:{user_id}:turn:{turn_id}",
+              "ttl_hours": 72,
+              "data": "{input, intent, agent_results, response, metadata}"
+            },
+            {
+              "store": "healthtech_store",
+              "condition": "healthtech_agent_returned_result",
+              "key": "user:{user_id}:health:latest",
+              "data": "healthtech_agent output"
+            },
+            {
+              "store": "fintech_store",
+              "condition": "fintech_agent_returned_result",
+              "key": "user:{user_id}:credit:latest",
+              "data": "fintech_agent output"
+            },
+            {
+              "store": "insurtech_store",
+              "condition": "insurtech_agent_returned_result",
+              "key": "user:{user_id}:insurance:latest",
+              "data": "insurtech_agent output"
+            },
+            {
+              "store": "abha",
+              "condition": "claim_agent_completed",
+              "resource": "Encounter",
+              "data": "FHIR Encounter from claim"
+            }
+          ],
+          "next": "event_emission"
+        },
+        {
+          "node_id": "event_emission",
+          "type": "custom",
+          "display": "Emit Events (Kafka, Async)",
+          "async": true,
+          "priority": "medium",
+          "events": [
+            {
+              "topic": "claim-events",
+              "condition": "claim_agent_completed",
+              "payload": "{claim_id, claim_status, hospital_id, settlement_amount_inr}"
+            },
+            {
+              "topic": "credit-events",
+              "condition": "fintech_agent_completed AND credit_limit_changed",
+              "payload": "{user_id, new_credit_limit_inr, hrs_score}"
+            },
+            {
+              "topic": "ubi-events",
+              "condition": "insurtech_agent_completed AND hrs_delta > 30",
+              "payload": "{user_id, hrs_band, ubi_premium_delta_pct, effective_date}"
+            },
+            {
+              "topic": "health-events",
+              "condition": "healthtech_agent_completed",
+              "payload": "{user_id, hrs_score, hrs_band, hrs_delta}"
+            }
+          ],
+          "next": "side_effects"
+        },
+        {
+          "node_id": "side_effects",
+          "type": "custom",
+          "display": "Custom Side-Effects (Async)",
+          "async": true,
+          "priority": "low",
+          "effects": [
+            {
+              "name": "nfc_card_update",
+              "condition": "fintech_agent_completed AND credit_limit_changed",
+              "action": "push_new_limit_to_nfc_card_se_applet",
+              "timeout_seconds": 30
+            },
+            {
+              "name": "ubi_recalc_job",
+              "condition": "insurtech_agent_completed AND hrs_delta >= 30",
+              "action": "enqueue_quarterly_auto_switch_check",
+              "timeout_seconds": 5
+            },
+            {
+              "name": "hospital_payment_initiation",
+              "condition": "claim_agent_completed AND claim_status == 'approved'",
+              "action": "initiate_payment_to_hospital",
+              "timeout_seconds": 60
+            }
+          ],
+          "next": "output_delivery"
+        },
+        {
+          "node_id": "output_delivery",
+          "type": "end",
+          "display": "Output Delivery",
+          "delivery_methods": {
+            "app": "FCM/APNs push + in-app API response",
+            "whatsapp": "Meta Business API (sync wait for receipt)",
+            "nfc_hospital": "FHIR callback webhook",
+            "insurer": "REST webhook subscription (async)"
+          },
+          "idempotency": {
+            "mechanism": "idempotency_key = hash(user_id, turn_id)",
+            "timeout_seconds": 30,
+            "retry_on_timeout": true
+          },
+          "marks_thread": "COMPLETED",
+          "next": "audit_logging"
+        },
+        {
+          "node_id": "audit_logging",
+          "type": "note",
+          "display": "Audit Log (LangSmith + S3)",
+          "async": true,
+          "contents": [
+            "full_node_execution_timeline",
+            "phase_completion_times",
+            "agent_timeouts_and_fallbacks",
+            "validation_check_results",
+            "all_llm_inputs_outputs",
+            "tool_call_inputs_outputs",
+            "retry_history",
+            "delivery_confirmation",
+            "staleness_flags_for_cached_data"
+          ],
+          "storage": {
+            "langsmith": { "retention_days": 90 },
+            "kafka_s3_archive": { "retention_years": 7 }
+          }
+        }
+      ]
+    },
+    {
+      "phase_id": "phase_7_interrupts",
+      "name": "Human Handoff & Interrupts",
+      "description": "Centralized interrupt handling. Single node for all human reviews.",
+      "nodes": [
+        {
+          "node_id": "human_interrupt_node",
+          "type": "interrupt",
+          "display": "Human Review Queue",
+          "description": "LangGraph interrupt(). Workflow pauses, awaits human decision via dashboard.",
+          "interrupt_triggers": [
+            {
+              "trigger": "claim_agent_routes_to_human",
+              "reason": "fraud_score in (0.3, 0.7) OR claim_amount > 3000000 OR policy_ambiguity",
+              "priority": "high",
+              "sla_hours": 4,
+              "queue": "underwriter_claims"
+            },
+            {
+              "trigger": "validation_layer_hard_fail",
+              "reason": "Agent output schema validation failed",
+              "priority": "high",
+              "sla_hours": 1,
+              "queue": "engineering_alert"
+            },
+            {
+              "trigger": "guardrail_all_retries_failed",
+              "reason": "Response failed guardrails 2+ times",
+              "priority": "medium",
+              "sla_hours": 2,
+              "queue": "compliance_review"
+            },
+            {
+              "trigger": "user_escalation",
+              "reason": "User explicitly requested human support",
+              "priority": "medium",
+              "sla_hours": 1,
+              "queue": "customer_support"
+            }
+          ],
+          "interrupt_context": {
+            "include": [
+              "original_user_message",
+              "all_agent_results",
+              "validation_failure_details",
+              "guardrail_failure_reasons",
+              "suggested_action"
+            ]
+          },
+          "resume_protocol": {
+            "method": "POST /langgraph/resume/{thread_id}",
+            "input_schema": {
+              "decision": "string (approve|reject|require_more_info|escalate)",
+              "reason": "string",
+              "authorized_by": "string (underwriter_id|support_agent_id)"
+            },
+            "resumes_at": "output_delivery node"
+          },
+          "notifications": [
+            "slack_to_on_call_team",
+            "email_to_queue_owner",
+            "sms_if_priority_high"
+          ]
+        }
+      ]
+    }
+  ],
+  "global_error_handling": {
+    "description": "Fallback strategy for unrecoverable errors at any phase",
+    "handlers": [
+      {
+        "error_type": "tool_timeout",
+        "at_phase": "phase_2_agents",
+        "action": "return_cache_with_staleness_flag_or_fallback",
+        "log_level": "warning"
+      },
+      {
+        "error_type": "memory_read_failure",
+        "at_phase": "phase_0",
+        "action": "continue_with_empty_context",
+        "log_level": "warning"
+      },
+      {
+        "error_type": "llm_call_failure",
+        "at_phase": "any",
+        "action": "retry_once_with_backoff",
+        "max_retries": 1,
+        "backoff_seconds": [1]
+      },
+      {
+        "error_type": "privacy_gate_violation",
+        "at_phase": "any",
+        "action": "halt_and_return_privacy_error",
+        "escalate": false
+      }
+    ]
+  },
+  "performance_targets": {
+    "phase_0_privacy": { "p99_ms": 100 },
+    "phase_1_intent": { "p99_ms": 500 },
+    "phase_2_agents_total": { "p99_ms": 8000 },
+    "phase_3_validation": { "p99_ms": 1000 },
+    "phase_4_synthesis": { "p99_ms": 2000 },
+    "phase_5_guardrails": { "p99_ms": 1500 },
+    "phase_6_delivery": { "p99_ms": 1000 },
+    "end_to_end": { "p99_ms": 15000 }
+  }
+}
